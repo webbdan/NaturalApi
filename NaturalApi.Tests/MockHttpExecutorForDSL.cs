@@ -127,4 +127,10 @@ public class MockApiResultContextForDSL : IApiResultContext
         next?.Invoke(result);
         return this;
     }
+
+    public string? GetCookie(string name)
+    {
+        // Mock implementation - return null for testing
+        return null;
+    }
 }

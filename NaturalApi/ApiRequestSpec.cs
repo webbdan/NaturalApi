@@ -11,6 +11,9 @@ namespace NaturalApi;
 /// <param name="PathParams">Path parameters for URL replacement</param>
 /// <param name="Body">Request body</param>
 /// <param name="Timeout">Request timeout</param>
+/// <param name="SuppressAuth">Whether to suppress authentication for this request</param>
+/// <param name="Username">Username context for per-user authentication</param>
+/// <param name="Cookies">Request cookies to be sent with the request</param>
 public record ApiRequestSpec(
     string Endpoint,
     HttpMethod Method,
@@ -18,7 +21,10 @@ public record ApiRequestSpec(
     IDictionary<string, object> QueryParams,
     IDictionary<string, object> PathParams,
     object? Body,
-    TimeSpan? Timeout)
+    TimeSpan? Timeout,
+    bool SuppressAuth = false,
+    string? Username = null,
+    IDictionary<string, string> Cookies = null)
 {
     /// <summary>
     /// Creates a new specification with an additional header.
@@ -157,5 +163,60 @@ public record ApiRequestSpec(
     public ApiRequestSpec WithTimeout(TimeSpan timeout)
     {
         return this with { Timeout = timeout };
+    }
+
+    /// <summary>
+    /// Creates a new specification with authentication suppressed.
+    /// </summary>
+    /// <returns>New specification with authentication suppressed</returns>
+    public ApiRequestSpec WithoutAuth()
+    {
+        return this with { SuppressAuth = true };
+    }
+
+    /// <summary>
+    /// Creates a new specification with a username context for per-user authentication.
+    /// </summary>
+    /// <param name="username">Username for authentication context</param>
+    /// <returns>New specification with username set</returns>
+    public ApiRequestSpec AsUser(string username)
+    {
+        return this with { Username = username };
+    }
+
+    /// <summary>
+    /// Creates a new specification with an additional cookie.
+    /// </summary>
+    /// <param name="name">Cookie name</param>
+    /// <param name="value">Cookie value</param>
+    /// <returns>New specification with the cookie added</returns>
+    public ApiRequestSpec WithCookie(string name, string value)
+    {
+        var newCookies = new Dictionary<string, string>(Cookies ?? new Dictionary<string, string>()) { [name] = value };
+        return this with { Cookies = newCookies };
+    }
+
+    /// <summary>
+    /// Creates a new specification with additional cookies.
+    /// </summary>
+    /// <param name="cookies">Cookies to add</param>
+    /// <returns>New specification with cookies added</returns>
+    public ApiRequestSpec WithCookies(IDictionary<string, string> cookies)
+    {
+        var newCookies = new Dictionary<string, string>(Cookies ?? new Dictionary<string, string>());
+        foreach (var cookie in cookies)
+        {
+            newCookies[cookie.Key] = cookie.Value;
+        }
+        return this with { Cookies = newCookies };
+    }
+
+    /// <summary>
+    /// Creates a new specification with cookies cleared.
+    /// </summary>
+    /// <returns>New specification with no cookies</returns>
+    public ApiRequestSpec ClearCookies()
+    {
+        return this with { Cookies = new Dictionary<string, string>() };
     }
 }

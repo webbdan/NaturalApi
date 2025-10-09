@@ -286,7 +286,22 @@ public class ApiResultContext : IApiResultContext
             );
         }
 
-        // Deserialize and return the body
+        // Check if T is ApiResponse<SomeType>
+        if (typeof(T).IsGenericType && 
+            typeof(T).GetGenericTypeDefinition() == typeof(ApiResponse<>))
+        {
+            var bodyType = typeof(T).GetGenericArguments()[0];
+            
+            // Use reflection to call BodyAs<T> with the body type
+            var bodyAsMethod = typeof(ApiResultContext).GetMethod("BodyAs")?.MakeGenericMethod(bodyType);
+            var body = bodyAsMethod?.Invoke(this, null);
+            
+            // Create ApiResponse<T> instance
+            var apiResponseType = typeof(ApiResponse<>).MakeGenericType(bodyType);
+            return (T)Activator.CreateInstance(apiResponseType, this, _httpExecutor);
+        }
+
+        // Return just the deserialized body (existing behavior)
         return BodyAs<T>();
     }
 
@@ -303,5 +318,55 @@ public class ApiResultContext : IApiResultContext
         var result = new ApiResult(this, _httpExecutor);
         next(result);
         return this;
+    }
+
+    /// <summary>
+    /// Gets a cookie value from the response headers.
+    /// </summary>
+    /// <param name="name">Cookie name</param>
+    /// <returns>Cookie value if found, null otherwise</returns>
+    public string? GetCookie(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        // Look for Set-Cookie headers
+        if (Response.Headers.TryGetValues("Set-Cookie", out var setCookieHeaders))
+        {
+            foreach (var setCookieHeader in setCookieHeaders)
+            {
+                var cookieValue = ExtractCookieValue(setCookieHeader, name);
+                if (cookieValue != null)
+                    return cookieValue;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts a cookie value from a Set-Cookie header.
+    /// </summary>
+    /// <param name="setCookieHeader">The Set-Cookie header value</param>
+    /// <param name="cookieName">The name of the cookie to extract</param>
+    /// <returns>Cookie value if found, null otherwise</returns>
+    private string? ExtractCookieValue(string setCookieHeader, string cookieName)
+    {
+        if (string.IsNullOrWhiteSpace(setCookieHeader) || string.IsNullOrWhiteSpace(cookieName))
+            return null;
+
+        // Split by semicolon to get cookie parts
+        var parts = setCookieHeader.Split(';');
+        if (parts.Length == 0)
+            return null;
+
+        // First part should be the cookie name=value
+        var cookiePart = parts[0].Trim();
+        if (cookiePart.StartsWith($"{cookieName}=", StringComparison.OrdinalIgnoreCase))
+        {
+            return cookiePart.Substring(cookieName.Length + 1);
+        }
+
+        return null;
     }
 }

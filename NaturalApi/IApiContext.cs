@@ -66,11 +66,47 @@ public interface IApiContext
     IApiContext UsingToken(string token);
 
     /// <summary>
+    /// Disables authentication for this request.
+    /// Overrides any default authentication provider.
+    /// </summary>
+    /// <returns>New context without authentication</returns>
+    IApiContext WithoutAuth();
+
+    /// <summary>
+    /// Sets the username context for per-user authentication.
+    /// This username will be passed to the auth provider for token resolution.
+    /// </summary>
+    /// <param name="username">Username for authentication context</param>
+    /// <returns>New context with username set</returns>
+    IApiContext AsUser(string username);
+
+    /// <summary>
     /// Sets a timeout for the request.
     /// </summary>
     /// <param name="timeout">Request timeout</param>
     /// <returns>New context with timeout set</returns>
     IApiContext WithTimeout(TimeSpan timeout);
+
+    /// <summary>
+    /// Adds a cookie to the request.
+    /// </summary>
+    /// <param name="name">Cookie name</param>
+    /// <param name="value">Cookie value</param>
+    /// <returns>New context with cookie added</returns>
+    IApiContext WithCookie(string name, string value);
+
+    /// <summary>
+    /// Adds multiple cookies to the request.
+    /// </summary>
+    /// <param name="cookies">Dictionary of cookies to add</param>
+    /// <returns>New context with cookies added</returns>
+    IApiContext WithCookies(IDictionary<string, string> cookies);
+
+    /// <summary>
+    /// Clears all cookies from the request.
+    /// </summary>
+    /// <returns>New context with cookies cleared</returns>
+    IApiContext ClearCookies();
 
     /// <summary>
     /// Executes a GET request.

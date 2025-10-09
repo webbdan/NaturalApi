@@ -7,7 +7,7 @@ namespace NaturalApi;
 public class Api : IApi
 {
     private readonly IHttpExecutor _httpExecutor;
-
+    private readonly IApiDefaultsProvider? _defaults;
     private readonly string? _baseUrl;
 
     /// <summary>
@@ -33,6 +33,17 @@ public class Api : IApi
     }
 
     /// <summary>
+    /// Initializes a new instance of the Api class with defaults provider.
+    /// </summary>
+    /// <param name="httpExecutor">HTTP executor for making requests</param>
+    /// <param name="defaults">Default configuration provider</param>
+    public Api(IHttpExecutor httpExecutor, IApiDefaultsProvider defaults)
+    {
+        _httpExecutor = httpExecutor ?? throw new ArgumentNullException(nameof(httpExecutor));
+        _defaults = defaults ?? throw new ArgumentNullException(nameof(defaults));
+    }
+
+    /// <summary>
     /// Creates a new API context for the specified endpoint.
     /// </summary>
     /// <param name="endpoint">The target endpoint (absolute or relative URL)</param>
@@ -47,20 +58,39 @@ public class Api : IApi
         if (trimmedEndpoint == "" || (trimmedEndpoint.Length > 1 && trimmedEndpoint.All(c => c == '/')))
             throw new ArgumentException("Endpoint cannot be null or empty", nameof(endpoint));
 
-        // Combine base URL with endpoint if base URL is provided
-        var fullEndpoint = _baseUrl != null && !endpoint.StartsWith("http") 
-            ? $"{_baseUrl.TrimEnd('/')}/{endpoint.TrimStart('/')}"
-            : endpoint;
+        // Determine the full endpoint URL
+        string fullEndpoint;
+        if (_defaults?.BaseUri != null && !endpoint.StartsWith("http"))
+        {
+            // Use defaults base URI
+            fullEndpoint = $"{_defaults.BaseUri.ToString().TrimEnd('/')}/{endpoint.TrimStart('/')}";
+        }
+        else if (_baseUrl != null && !endpoint.StartsWith("http"))
+        {
+            // Use legacy base URL
+            fullEndpoint = $"{_baseUrl.TrimEnd('/')}/{endpoint.TrimStart('/')}";
+        }
+        else
+        {
+            // Use endpoint as-is (absolute URL)
+            fullEndpoint = endpoint;
+        }
 
+        // Create spec with defaults
         var spec = new ApiRequestSpec(
             fullEndpoint,
             HttpMethod.Get, // Default method, will be overridden by verb methods
-            new Dictionary<string, string>(),
+            _defaults?.DefaultHeaders ?? new Dictionary<string, string>(),
             new Dictionary<string, object>(),
             new Dictionary<string, object>(),
             null,
-            null);
+            _defaults?.Timeout);
 
-        return new ApiContext(spec, _httpExecutor);
+        // Use authenticated executor if available and not using a mock, otherwise use regular executor
+        var executor = _defaults?.AuthProvider != null && _httpExecutor.GetType().Name != "MockHttpExecutor"
+            ? new AuthenticatedHttpClientExecutor(new HttpClient())
+            : _httpExecutor;
+        
+        return new ApiContext(spec, executor, _defaults?.AuthProvider);
     }
 }

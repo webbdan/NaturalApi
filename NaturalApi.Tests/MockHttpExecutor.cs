@@ -8,16 +8,37 @@ namespace NaturalApi.Tests;
 /// </summary>
 internal class MockHttpExecutor : IHttpExecutor
 {
+    public ApiRequestSpec LastSpec { get; private set; } = null!;
+    
+    private int _statusCode = 200;
+    private string _responseBody = """{"message":"Mock response"}""";
+    private IDictionary<string, string> _headers = new Dictionary<string, string>();
+
+    public void SetupResponse(int statusCode, string responseBody, IDictionary<string, string>? headers = null)
+    {
+        _statusCode = statusCode;
+        _responseBody = responseBody;
+        _headers = headers ?? new Dictionary<string, string>();
+    }
+
     public IApiResultContext Execute(ApiRequestSpec spec)
     {
+        LastSpec = spec;
+        
         // Create a mock response message
-        var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        var response = new HttpResponseMessage((System.Net.HttpStatusCode)_statusCode)
         {
-            Content = new StringContent("{\"message\":\"Mock response\"}")
+            Content = new StringContent(_responseBody)
         };
 
+        // Add headers to response
+        foreach (var header in _headers)
+        {
+            response.Headers.Add(header.Key, header.Value);
+        }
+
         // Create a mock result context
-        return new MockApiResultContext(response);
+        return new MockApiResultContext(response, _responseBody, _headers, this);
     }
 }
 
@@ -31,13 +52,15 @@ internal class MockApiResultContext : IApiResultContext
     public int StatusCode { get; }
     public IDictionary<string, string> Headers { get; }
     public string RawBody { get; }
+    private readonly IHttpExecutor _httpExecutor;
 
-    public MockApiResultContext(HttpResponseMessage response)
+    public MockApiResultContext(HttpResponseMessage response, string responseBody, IDictionary<string, string> headers, IHttpExecutor httpExecutor)
     {
         Response = response ?? throw new ArgumentNullException(nameof(response));
         StatusCode = (int)response.StatusCode;
-        Headers = new Dictionary<string, string>();
-        RawBody = "{\"message\":\"Mock response\"}";
+        Headers = headers;
+        RawBody = responseBody;
+        _httpExecutor = httpExecutor ?? throw new ArgumentNullException(nameof(httpExecutor));
     }
 
     public T BodyAs<T>()
@@ -48,8 +71,15 @@ internal class MockApiResultContext : IApiResultContext
             return (T)(object)RawBody;
         }
         
-        // For other types, return default value
-        return default(T)!;
+        // For JSON deserialization
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<T>(RawBody) ?? default(T)!;
+        }
+        catch
+        {
+            return default(T)!;
+        }
     }
 
     public IApiResultContext ShouldReturn<T>(
@@ -81,15 +111,36 @@ internal class MockApiResultContext : IApiResultContext
 
     public T ShouldReturn<T>()
     {
-        // Mock implementation - in real tests this would validate and return deserialized object
-        return default(T)!;
+        // Check if T is ApiResponse<SomeType>
+        if (typeof(T).IsGenericType && 
+            typeof(T).GetGenericTypeDefinition() == typeof(ApiResponse<>))
+        {
+            var bodyType = typeof(T).GetGenericArguments()[0];
+            
+            // Use reflection to call BodyAs<T> with the body type
+            var bodyAsMethod = typeof(MockApiResultContext).GetMethod("BodyAs")?.MakeGenericMethod(bodyType);
+            var body = bodyAsMethod?.Invoke(this, null);
+            
+            // Create ApiResponse<T> instance
+            var apiResponseType = typeof(ApiResponse<>).MakeGenericType(bodyType);
+            return (T)Activator.CreateInstance(apiResponseType, this, _httpExecutor);
+        }
+
+        // Return just the deserialized body (existing behavior)
+        return BodyAs<T>();
     }
 
     public IApiResultContext Then(Action<IApiResult> next)
     {
         // Mock implementation - in real tests this would execute the action
-        var result = new ApiResult(this, new MockHttpExecutor());
+        var result = new ApiResponse<object>(this, _httpExecutor);
         next?.Invoke(result);
         return this;
+    }
+
+    public string? GetCookie(string name)
+    {
+        // Mock implementation - return null for testing
+        return null;
     }
 }

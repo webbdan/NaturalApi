@@ -81,4 +81,11 @@ public interface IApiResultContext
     /// <param name="next">Action to perform on this result</param>
     /// <returns>This result context for chaining</returns>
     IApiResultContext Then(Action<IApiResult> next);
+
+    /// <summary>
+    /// Gets a cookie value from the response headers.
+    /// </summary>
+    /// <param name="name">Cookie name</param>
+    /// <returns>Cookie value if found, null otherwise</returns>
+    string? GetCookie(string name);
 }

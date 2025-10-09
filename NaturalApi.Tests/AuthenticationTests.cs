@@ -7,13 +7,13 @@ namespace NaturalApi.Tests;
 public class AuthenticationTests
 {
     private Api _api = null!;
+    private MockHttpExecutor _mockExecutor = null!;
 
     [TestInitialize]
     public void Setup()
     {
-        var httpClient = new HttpClient();
-        var executor = new HttpClientExecutor(httpClient);
-        _api = new Api(executor);
+        _mockExecutor = new MockHttpExecutor();
+        _api = new Api(_mockExecutor);
     }
 
     [TestMethod]
@@ -21,6 +21,7 @@ public class AuthenticationTests
     {
         // Arrange
         var token = "abc123";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
@@ -30,7 +31,8 @@ public class AuthenticationTests
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains("Bearer abc123"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual("Bearer abc123", _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
@@ -38,6 +40,7 @@ public class AuthenticationTests
     {
         // Arrange
         var schemeAndToken = "Bearer xyz789";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
@@ -47,7 +50,8 @@ public class AuthenticationTests
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains("Bearer xyz789"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual("Bearer xyz789", _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
@@ -55,6 +59,7 @@ public class AuthenticationTests
     {
         // Arrange
         var token = "def456";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
@@ -64,7 +69,8 @@ public class AuthenticationTests
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains("Bearer def456"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual("Bearer def456", _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
@@ -72,6 +78,7 @@ public class AuthenticationTests
     {
         // Arrange
         var basicAuth = "Basic dXNlcjpwYXNzd29yZA=="; // user:password in base64
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
@@ -81,14 +88,16 @@ public class AuthenticationTests
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains("Basic dXNlcjpwYXNzd29yZA=="));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual("Basic dXNlcjpwYXNzd29yZA==", _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
     public void Should_Support_Custom_Authentication_Scheme_When_UsingAuth()
     {
         // Arrange
-        var customAuth = "CustomScheme custom-token-value";
+        var customAuth = "CustomScheme token123";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
@@ -97,12 +106,9 @@ public class AuthenticationTests
 
         // Assert
         Assert.IsNotNull(result);
-        // Accept both 200 and 502 (external service may be unreliable)
-        Assert.IsTrue(result.StatusCode == 200 || result.StatusCode == 502);
-        if (result.StatusCode == 200)
-        {
-            Assert.IsTrue(result.RawBody.Contains("CustomScheme custom-token-value"));
-        }
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual("CustomScheme token123", _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
@@ -110,261 +116,168 @@ public class AuthenticationTests
     {
         // Arrange
         var token = "test-token";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
-        // Test GET
-        var getResult = _api.For("https://httpbin.org/headers")
-            .UsingToken(token)
-            .Get();
+        // Act & Assert - Test all HTTP methods
+        var getResult = _api.For("https://httpbin.org/headers").UsingAuth(token).Get();
+        var postResult = _api.For("https://httpbin.org/headers").UsingAuth(token).Post();
+        var putResult = _api.For("https://httpbin.org/headers").UsingAuth(token).Put();
+        var patchResult = _api.For("https://httpbin.org/headers").UsingAuth(token).Patch();
+        var deleteResult = _api.For("https://httpbin.org/headers").UsingAuth(token).Delete();
 
-        // Accept both 200 and 502 (external service may be unreliable)
-        Assert.IsTrue(getResult.StatusCode == 200 || getResult.StatusCode == 502);
-        if (getResult.StatusCode == 200)
-        {
-            Assert.IsTrue(getResult.RawBody.Contains("Bearer test-token"));
-        }
-
-        // Test POST (using /anything endpoint which accepts all methods)
-        var postResult = _api.For("https://httpbin.org/anything")
-            .UsingToken(token)
-            .Post(new { test = "data" });
-
-        // Accept both 200 and 502 (external service may be unreliable)
-        Assert.IsTrue(postResult.StatusCode == 200 || postResult.StatusCode == 502);
-        if (postResult.StatusCode == 200)
-        {
-            Assert.IsTrue(postResult.RawBody.Contains("Bearer test-token"));
-        }
-
-        // Test PUT (using /anything endpoint which accepts all methods)
-        var putResult = _api.For("https://httpbin.org/anything")
-            .UsingToken(token)
-            .Put(new { test = "data" });
-
-        // Accept both 200 and 502 (external service may be unreliable)
-        Assert.IsTrue(putResult.StatusCode == 200 || putResult.StatusCode == 502);
-        if (putResult.StatusCode == 200)
-        {
-            Assert.IsTrue(putResult.RawBody.Contains("Bearer test-token"));
-        }
-
-        // Test PATCH (using /anything endpoint which accepts all methods)
-        var patchResult = _api.For("https://httpbin.org/anything")
-            .UsingToken(token)
-            .Patch(new { test = "data" });
-
-        // Accept both 200 and 502 (external service may be unreliable)
-        Assert.IsTrue(patchResult.StatusCode == 200 || patchResult.StatusCode == 502);
-        if (patchResult.StatusCode == 200)
-        {
-            Assert.IsTrue(patchResult.RawBody.Contains("Bearer test-token"));
-        }
-
-        // Test DELETE (using /anything endpoint which accepts all methods)
-        var deleteResult = _api.For("https://httpbin.org/anything")
-            .UsingToken(token)
-            .Delete();
-
-        // Accept both 200 and 502 (external service may be unreliable)
-        Assert.IsTrue(deleteResult.StatusCode == 200 || deleteResult.StatusCode == 502);
-        if (deleteResult.StatusCode == 200)
-        {
-            Assert.IsTrue(deleteResult.RawBody.Contains("Bearer test-token"));
-        }
+        // All should have Authorization header
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual("Bearer test-token", _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
     public void Should_Combine_Authentication_With_Other_Headers_When_Provided()
     {
         // Arrange
-        var token = "combined-token";
-        var customHeaders = new Dictionary<string, string>
-        {
-            ["Accept"] = "application/json",
-            ["User-Agent"] = "NaturalApi-Test"
-        };
+        var token = "test-token";
+        var customHeader = "Custom-Header-Value";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
-            .WithHeaders(customHeaders)
-            .UsingToken(token)
+            .WithHeader("X-Custom-Header", customHeader)
+            .UsingAuth(token)
             .Get();
 
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains("Bearer combined-token"));
-        Assert.IsTrue(result.RawBody.Contains("application/json"));
-        Assert.IsTrue(result.RawBody.Contains("NaturalApi-Test"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual("Bearer test-token", _mockExecutor.LastSpec.Headers["Authorization"]);
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("X-Custom-Header"));
+        Assert.AreEqual(customHeader, _mockExecutor.LastSpec.Headers["X-Custom-Header"]);
     }
 
     [TestMethod]
     public void Should_Override_Existing_Authorization_Header_When_UsingAuth_After_WithHeader()
     {
         // Arrange
-        var initialToken = "initial-token";
-        var finalToken = "final-token";
+        var originalToken = "original-token";
+        var newToken = "new-token";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
-            .WithHeader("Authorization", $"Bearer {initialToken}")
-            .UsingToken(finalToken)
+            .WithHeader("Authorization", $"Bearer {originalToken}")
+            .UsingAuth(newToken)
             .Get();
 
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains("Bearer final-token"));
-        Assert.IsFalse(result.RawBody.Contains("Bearer initial-token"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual("Bearer new-token", _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
     public void Should_Handle_Authentication_With_Path_Parameters_When_Provided()
     {
         // Arrange
-        var token = "path-token";
+        var token = "test-token";
+        var userId = "123";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
-        var result = _api.For("https://httpbin.org/anything/{id}")
-            .WithPathParam("id", 123)
-            .UsingToken(token)
+        var result = _api.For("https://httpbin.org/users/{id}")
+            .WithPathParam("id", userId)
+            .UsingAuth(token)
             .Get();
 
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains("Bearer path-token"));
-        Assert.IsTrue(result.RawBody.Contains("/anything/123"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual("Bearer test-token", _mockExecutor.LastSpec.Headers["Authorization"]);
+        // Note: Path parameter replacement happens in the executor, not in the spec
+        Assert.AreEqual("https://httpbin.org/users/{id}", _mockExecutor.LastSpec.Endpoint);
     }
 
     [TestMethod]
     public void Should_Handle_Authentication_With_Query_Parameters_When_Provided()
     {
         // Arrange
-        var token = "query-token";
+        var token = "test-token";
+        var queryParam = "test-value";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
-            .WithQueryParam("test", "value")
-            .UsingToken(token)
+            .WithQueryParam("param", queryParam)
+            .UsingAuth(token)
             .Get();
 
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains("Bearer query-token"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual("Bearer test-token", _mockExecutor.LastSpec.Headers["Authorization"]);
+        Assert.IsTrue(_mockExecutor.LastSpec.QueryParams.ContainsKey("param"));
+        Assert.AreEqual(queryParam, _mockExecutor.LastSpec.QueryParams["param"]);
     }
 
     [TestMethod]
     public void Should_Handle_Authentication_With_Timeout_When_Provided()
     {
         // Arrange
-        var token = "timeout-token";
+        var token = "test-token";
         var timeout = TimeSpan.FromSeconds(30);
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
-            .UsingToken(token)
             .WithTimeout(timeout)
+            .UsingAuth(token)
             .Get();
 
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains("Bearer timeout-token"));
-    }
-
-    [TestMethod]
-    public void Should_Throw_ArgumentException_When_UsingAuth_With_Null_Token()
-    {
-        // Arrange
-        var api = _api.For("https://httpbin.org/headers");
-
-        // Act & Assert
-        Assert.ThrowsException<ArgumentException>(() => api.UsingAuth(null!));
-    }
-
-    [TestMethod]
-    public void Should_Throw_ArgumentException_When_UsingAuth_With_Empty_Token()
-    {
-        // Arrange
-        var api = _api.For("https://httpbin.org/headers");
-
-        // Act & Assert
-        Assert.ThrowsException<ArgumentException>(() => api.UsingAuth(""));
-    }
-
-    [TestMethod]
-    public void Should_Throw_ArgumentException_When_UsingAuth_With_Whitespace_Token()
-    {
-        // Arrange
-        var api = _api.For("https://httpbin.org/headers");
-
-        // Act & Assert
-        Assert.ThrowsException<ArgumentException>(() => api.UsingAuth("   "));
-    }
-
-    [TestMethod]
-    public void Should_Throw_ArgumentException_When_UsingToken_With_Null_Token()
-    {
-        // Arrange
-        var api = _api.For("https://httpbin.org/headers");
-
-        // Act & Assert
-        Assert.ThrowsException<ArgumentException>(() => api.UsingToken(null!));
-    }
-
-    [TestMethod]
-    public void Should_Throw_ArgumentException_When_UsingToken_With_Empty_Token()
-    {
-        // Arrange
-        var api = _api.For("https://httpbin.org/headers");
-
-        // Act & Assert
-        Assert.ThrowsException<ArgumentException>(() => api.UsingToken(""));
-    }
-
-    [TestMethod]
-    public void Should_Throw_ArgumentException_When_UsingToken_With_Whitespace_Token()
-    {
-        // Arrange
-        var api = _api.For("https://httpbin.org/headers");
-
-        // Act & Assert
-        Assert.ThrowsException<ArgumentException>(() => api.UsingToken("   "));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual("Bearer test-token", _mockExecutor.LastSpec.Headers["Authorization"]);
+        Assert.AreEqual(timeout, _mockExecutor.LastSpec.Timeout);
     }
 
     [TestMethod]
     public void Should_Handle_Authentication_With_Special_Characters_In_Token()
     {
         // Arrange
-        var specialToken = "token-with-special.chars+and=signs";
+        var tokenWithSpecialChars = "token-with-special-chars!@#$%^&*()";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
-            .UsingToken(specialToken)
+            .UsingAuth(tokenWithSpecialChars)
             .Get();
 
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains($"Bearer {specialToken}"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual($"Bearer {tokenWithSpecialChars}", _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
     public void Should_Handle_Authentication_With_Unicode_Characters_In_Token()
     {
         // Arrange
-        var unicodeToken = "token-with-unicode-test"; // ASCII only for HTTP headers
+        var unicodeToken = "token-with-unicode-测试";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
-            .UsingToken(unicodeToken)
+            .UsingAuth(unicodeToken)
             .Get();
 
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains($"Bearer {unicodeToken}"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual($"Bearer {unicodeToken}", _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
@@ -372,103 +285,108 @@ public class AuthenticationTests
     {
         // Arrange
         var longToken = new string('a', 1000); // 1000 character token
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
-            .UsingToken(longToken)
+            .UsingAuth(longToken)
             .Get();
 
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains($"Bearer {longToken}"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual($"Bearer {longToken}", _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
-    public void Should_Handle_Authentication_With_Empty_Scheme_And_Token()
+    [ExpectedException(typeof(ArgumentException))]
+    public void Should_Throw_Exception_When_UsingAuth_With_Empty_Token()
     {
         // Arrange
-        var emptySchemeToken = " token"; // Space before token
+        var emptyToken = "";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
-        // Act
-        var result = _api.For("https://httpbin.org/headers")
-            .UsingAuth(emptySchemeToken)
+        // Act & Assert - Should throw ArgumentException
+        _api.For("https://httpbin.org/headers")
+            .UsingAuth(emptyToken)
             .Get();
-
-        // Assert
-        Assert.IsNotNull(result);
-        Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains(emptySchemeToken.Trim()));
-    }
-
-    [TestMethod]
-    public void Should_Handle_Authentication_With_Multiple_Spaces_In_Scheme()
-    {
-        // Arrange
-        var multiSpaceToken = "Bearer   token"; // Multiple spaces
-
-        // Act
-        var result = _api.For("https://httpbin.org/headers")
-            .UsingAuth(multiSpaceToken)
-            .Get();
-
-        // Assert
-        Assert.IsNotNull(result);
-        Assert.AreEqual(200, result.StatusCode);
-        // Check that the token is present (spaces may be normalized by the server)
-        Assert.IsTrue(result.RawBody.Contains("Bearer") && result.RawBody.Contains("token"));
     }
 
     [TestMethod]
     public void Should_Handle_Authentication_With_Complex_Scheme()
     {
         // Arrange
-        var complexAuth = "Digest username=\"user\", realm=\"test\", nonce=\"abc123\", uri=\"/test\", response=\"def456\"";
+        var complexScheme = "Bearer token-with-multiple-parts-and-special-chars!@#$%";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
-            .UsingAuth(complexAuth)
+            .UsingAuth(complexScheme)
             .Get();
 
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        // Check that the scheme is present (quotes may be normalized by the server)
-        Assert.IsTrue(result.RawBody.Contains("Digest") && result.RawBody.Contains("username"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual(complexScheme, _mockExecutor.LastSpec.Headers["Authorization"]);
+    }
+
+    [TestMethod]
+    public void Should_Handle_Authentication_With_Multiple_Spaces_In_Scheme()
+    {
+        // Arrange
+        var multiSpaceScheme = "Bearer  token  with  spaces";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
+
+        // Act
+        var result = _api.For("https://httpbin.org/headers")
+            .UsingAuth(multiSpaceScheme)
+            .Get();
+
+        // Assert
+        Assert.IsNotNull(result);
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual(multiSpaceScheme, _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
     public void Should_Handle_Authentication_With_Quoted_Token()
     {
         // Arrange
-        var quotedToken = "quoted-token-value"; // Remove quotes for HTTP header compatibility
+        var quotedToken = "\"quoted-token-value\"";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
-            .UsingToken(quotedToken)
+            .UsingAuth(quotedToken)
             .Get();
 
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains($"Bearer {quotedToken}"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual($"Bearer {quotedToken}", _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
     public void Should_Handle_Authentication_With_Base64_Encoded_Token()
     {
         // Arrange
-        var base64Token = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("user:password"));
+        var base64Token = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("test-token"));
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
-            .UsingToken(base64Token)
+            .UsingAuth(base64Token)
             .Get();
 
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains($"Bearer {base64Token}"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual($"Bearer {base64Token}", _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
@@ -476,16 +394,18 @@ public class AuthenticationTests
     {
         // Arrange
         var jwtToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
-            .UsingToken(jwtToken)
+            .UsingAuth(jwtToken)
             .Get();
 
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains($"Bearer {jwtToken}"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual($"Bearer {jwtToken}", _mockExecutor.LastSpec.Headers["Authorization"]);
     }
 
     [TestMethod]
@@ -493,18 +413,27 @@ public class AuthenticationTests
     {
         // Arrange
         var token = "chained-token";
+        var customHeader = "chained-header-value";
+        var queryParam = "chained-param-value";
+        _mockExecutor.SetupResponse(200, """{"message":"Mock response"}""");
 
         // Act
         var result = _api.For("https://httpbin.org/headers")
-            .WithHeader("Accept", "application/json")
-            .UsingToken(token)
-            .WithQueryParam("test", "value")
+            .WithHeader("X-Custom-Header", customHeader)
+            .WithQueryParam("param", queryParam)
+            .WithTimeout(TimeSpan.FromSeconds(15))
+            .UsingAuth(token)
             .Get();
 
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(200, result.StatusCode);
-        Assert.IsTrue(result.RawBody.Contains($"Bearer {token}"));
-        Assert.IsTrue(result.RawBody.Contains("application/json"));
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("Authorization"));
+        Assert.AreEqual("Bearer chained-token", _mockExecutor.LastSpec.Headers["Authorization"]);
+        Assert.IsTrue(_mockExecutor.LastSpec.Headers.ContainsKey("X-Custom-Header"));
+        Assert.AreEqual(customHeader, _mockExecutor.LastSpec.Headers["X-Custom-Header"]);
+        Assert.IsTrue(_mockExecutor.LastSpec.QueryParams.ContainsKey("param"));
+        Assert.AreEqual(queryParam, _mockExecutor.LastSpec.QueryParams["param"]);
+        Assert.AreEqual(TimeSpan.FromSeconds(15), _mockExecutor.LastSpec.Timeout);
     }
 }

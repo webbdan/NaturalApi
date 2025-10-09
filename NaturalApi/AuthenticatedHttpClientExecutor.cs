@@ -1,18 +1,21 @@
+// AIModified:2025-10-09T07:22:36Z
+using System.Net.Http.Headers;
+
 namespace NaturalApi;
 
 /// <summary>
-/// HttpClient-based implementation of IHttpExecutor.
-/// Executes HTTP requests using the provided HttpClient.
+/// HttpClient-based implementation of IAuthenticatedHttpExecutor.
+/// Executes HTTP requests with authentication support.
 /// </summary>
-public class HttpClientExecutor : IHttpExecutor
+public class AuthenticatedHttpClientExecutor : IAuthenticatedHttpExecutor
 {
     private readonly HttpClient _httpClient;
 
     /// <summary>
-    /// Initializes a new instance of the HttpClientExecutor class.
+    /// Initializes a new instance of the AuthenticatedHttpClientExecutor class.
     /// </summary>
     /// <param name="httpClient">HttpClient instance for making requests</param>
-    public HttpClientExecutor(HttpClient httpClient)
+    public AuthenticatedHttpClientExecutor(HttpClient httpClient)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     }
@@ -23,6 +26,20 @@ public class HttpClientExecutor : IHttpExecutor
     /// <param name="spec">Request specification containing all request details</param>
     /// <returns>Result context with response data and validation methods</returns>
     public IApiResultContext Execute(ApiRequestSpec spec)
+    {
+        // For backward compatibility, execute without authentication
+        return ExecuteAsync(spec, null, null, true).GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Executes an HTTP request with authentication resolution.
+    /// </summary>
+    /// <param name="spec">Request specification containing all request details</param>
+    /// <param name="authProvider">Authentication provider for token resolution</param>
+    /// <param name="username">Username context for per-user authentication</param>
+    /// <param name="suppressAuth">Whether to suppress authentication for this request</param>
+    /// <returns>Result context with response data and validation methods</returns>
+    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, bool suppressAuth)
     {
         if (spec == null)
             throw new ArgumentNullException(nameof(spec));
@@ -52,6 +69,16 @@ public class HttpClientExecutor : IHttpExecutor
                 var cookieValues = spec.Cookies.Select(c => $"{c.Key}={c.Value}");
                 request.Headers.Add("Cookie", string.Join("; ", cookieValues));
             }
+
+            // Handle authentication
+            if (!suppressAuth && authProvider != null)
+            {
+                var token = await authProvider.GetAuthTokenAsync(username);
+                if (!string.IsNullOrEmpty(token))
+                {
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                }
+            }
             
             // Add body for POST, PUT, PATCH requests
             if (spec.Body != null && (spec.Method == HttpMethod.Post || spec.Method == HttpMethod.Put || spec.Method == HttpMethod.Patch))
@@ -69,11 +96,11 @@ public class HttpClientExecutor : IHttpExecutor
             if (spec.Timeout.HasValue)
             {
                 using var cts = new CancellationTokenSource(spec.Timeout.Value);
-                response = _httpClient.Send(request, cts.Token);
+                response = await _httpClient.SendAsync(request, cts.Token);
             }
             else
             {
-                response = _httpClient.Send(request);
+                response = await _httpClient.SendAsync(request);
             }
             
             return new ApiResultContext(response, this);
