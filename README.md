@@ -32,7 +32,7 @@ var user = await Api.For("/users/1")
     .ShouldReturn<User>();
 ```
 
-That’s not just cleaner — it’s readable.
+That’s not just cleaner, it’s readable.
 It says exactly what it does. And when you come back to it six months later, you’ll still know what it means.
 
 ---
@@ -139,7 +139,7 @@ Every validation reads like what you’d say aloud:
 
 ## Using Dependency Injection
 
-NaturalApi was designed for DI — not bolted onto it.
+NaturalApi was designed for DI- not bolted onto it.
 
 ```csharp
 // Program.cs or Startup.cs
@@ -272,12 +272,43 @@ If your tests read like English and fail like humans speak, you’ll actually re
 
 ---
 
+## Documentation
+
+### Getting Started
+- [**Getting Started**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/getting-started.md) - Installation, first API call, basic setup
+- [**Configuration**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/configuration.md) - Base URLs, timeouts, default headers, DI setup
+- [**Examples**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/examples.md) - Real-world scenarios and complete examples
+
+### Core Features
+- [**Request Building**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/request-building.md) - Headers, query params, path params, cookies
+- [**HTTP Verbs**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/http-verbs.md) - GET, POST, PUT, PATCH, DELETE with examples
+- [**Assertions**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/assertions.md) - ShouldReturn variations, validation patterns
+- [**Authentication**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/authentication.md) - Auth providers, caching, per-user tokens
+
+### Advanced Topics
+- [**Error Handling**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/error-handling.md) - Exception types, debugging, troubleshooting
+- [**Testing Guide**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/testing-guide.md) - Unit testing with mocks, integration testing
+- [**Extensibility**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/extensibility.md) - Custom executors, validators, auth providers
+
+### Reference
+- [**API Reference**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/api-reference.md) - Complete interface and class documentation
+- [**Troubleshooting**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/troubleshooting.md) - Common issues and solutions
+- [**Contributing**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/contributing.md) - Architecture internals and contribution guidelines
+
+### Design & Philosophy
+- [**Philosophy & Design Principles**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/philosophyanddesignprinciples.md) - Core design philosophy
+- [**Fluent Syntax Reference**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/fluentsyntax.md) - Complete grammar and method reference
+- [**Dependency Injection Guide**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/di.md) - DI patterns and ServiceCollectionExtensions
+- [**Architecture Overview**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/architectureanddesign.md) - Internal design and implementation
+
+---
+
 ## License
 
-MIT. Do what you want, just don’t ruin the readability.
+MIT. Do what you want, just don't ruin the readability.
 
 ---
 
 ## Contributing
 
-Good ideas welcome. Over-engineering isn’t.
+Good ideas welcome. Over-engineering isn't.

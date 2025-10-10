@@ -34,12 +34,56 @@ You can omit anything not relevant — the grammar remains valid.
 | `.WithQueryParams(object or Dictionary<string,object>)` | Adds multiple query parameters.                     | `IApiContext` |
 | `.WithPathParam(string key, object value)`              | Replaces `{key}` in the path.                       | `IApiContext` |
 | `.WithPathParams(object or Dictionary<string,object>)`  | Replaces multiple path parameters.                  | `IApiContext` |
+| `.WithCookie(string name, string value)`                | Adds a single cookie.                               | `IApiContext` |
+| `.WithCookies(Dictionary<string,string> cookies)`        | Adds multiple cookies.                              | `IApiContext` |
+| `.ClearCookies()`                                        | Removes all cookies from the request.               | `IApiContext` |
+| `.WithTimeout(TimeSpan timeout)`                        | Sets request timeout.                               | `IApiContext` |
 | `.UsingAuth(string schemeOrToken)`                      | Adds an authentication header (Bearer, Basic, etc). | `IApiContext` |
 | `.UsingToken(string token)`                             | Shortcut for Bearer tokens.                         | `IApiContext` |
+| `.WithoutAuth()`                                         | Disables authentication for this request.            | `IApiContext` |
+| `.AsUser(string username)`                               | Sets user context for per-user authentication.     | `IApiContext` |
 
 ---
 
-### **3. HTTP Verbs**
+### **3. Cookie Methods**
+
+NaturalApi supports cookie management for session-based authentication and state management.
+
+| Method                                          | Description                           | Returns       |
+| ----------------------------------------------- | ------------------------------------- | ------------- |
+| `.WithCookie(string name, string value)`       | Adds a single cookie to the request.  | `IApiContext` |
+| `.WithCookies(Dictionary<string,string> cookies)` | Adds multiple cookies to the request. | `IApiContext` |
+| `.ClearCookies()`                               | Removes all cookies from the request. | `IApiContext` |
+
+**Examples:**
+```csharp
+// Single cookie
+var data = await api.For("/protected")
+    .WithCookie("session", "abc123")
+    .Get()
+    .ShouldReturn<Data>();
+
+// Multiple cookies
+var data = await api.For("/dashboard")
+    .WithCookies(new Dictionary<string, string>
+    {
+        ["session"] = "abc123",
+        ["theme"] = "dark",
+        ["language"] = "en"
+    })
+    .Get()
+    .ShouldReturn<Data>();
+
+// Clear cookies
+var result = await api.For("/logout")
+    .ClearCookies()
+    .Post()
+    .ShouldReturn<LogoutResult>();
+```
+
+---
+
+### **4. HTTP Verbs**
 
 Each verb executes the request and transitions into a result context.
 
@@ -61,7 +105,7 @@ Async support is automatic; testers never deal with `Task<T>` directly.
 
 ---
 
-### **4. Assertions and Validation**
+### **5. Assertions and Validation**
 
 The validation step always begins with `.ShouldReturn()`, which transitions into an expectation context.
 
@@ -95,7 +139,7 @@ Api.For("/health")
 
 ---
 
-### **5. Optional Enhancements**
+### **6. Optional Enhancements**
 
 | Method                           | Description                                         |
 | -------------------------------- | --------------------------------------------------- |
@@ -107,7 +151,7 @@ Api.For("/health")
 
 ---
 
-### **6. Result Context**
+### **7. Result Context**
 
 After execution, `IApiResultContext` exposes the following:
 
@@ -123,7 +167,7 @@ All members are safe to call; no hidden streams or disposal surprises.
 
 ---
 
-### **7. Example — Full Flow**
+### **8. Example — Full Flow**
 
 ```csharp
 Api.For("/users/{id}")
@@ -141,7 +185,7 @@ Reads like English, executes like code, fails like truth.
 
 ---
 
-### **8. Example — Chained Continuation**
+### **9. Example — Chained Continuation**
 
 ```csharp
 Api.For("/users")
@@ -158,7 +202,7 @@ Declarative, legible, and free from setup clutter.
 
 ---
 
-### **9. Grammar Rules Summary**
+### **10. Grammar Rules Summary**
 
 | Rule                                                   | Description |
 | ------------------------------------------------------ | ----------- |
@@ -168,4 +212,18 @@ Declarative, legible, and free from setup clutter.
 | Assert using `.ShouldReturn()`                         |             |
 | Optionally chain with `.Then()`                        |             |
 | All steps are optional except `For()` and an HTTP verb |             |
+
+---
+
+## Related Topics
+
+- **[Getting Started](getting-started.md)** - Basic usage and setup
+- **[Request Building](request-building.md)** - Detailed request building guide
+- **[HTTP Verbs](http-verbs.md)** - Complete HTTP verb usage
+- **[Assertions](assertions.md)** - Response validation patterns
+- **[Authentication](authentication.md)** - Authentication methods
+- **[Examples](examples.md)** - Real-world usage scenarios
+- **[API Reference](api-reference.md)** - Complete interface documentation
+- **[Testing Guide](testing-guide.md)** - Testing with NaturalApi
+- **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
 
