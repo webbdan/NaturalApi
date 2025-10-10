@@ -1,4 +1,3 @@
-// AIModified:2025-10-09T07:22:36Z
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NaturalApi;
 
@@ -127,7 +126,7 @@ public class IApiAuthProviderTests
             _token = token;
         }
 
-        public Task<string?> GetAuthTokenAsync(string? username = null)
+        public Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
         {
             return Task.FromResult(_token);
         }
@@ -147,7 +146,7 @@ public class IApiAuthProviderTests
             _delayMs = delayMs;
         }
 
-        public async Task<string?> GetAuthTokenAsync(string? username = null)
+        public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
         {
             await Task.Delay(_delayMs);
             return _token;
@@ -159,7 +158,7 @@ public class IApiAuthProviderTests
     /// </summary>
     private class ExceptionThrowingAuthProvider : IApiAuthProvider
     {
-        public Task<string?> GetAuthTokenAsync(string? username = null)
+        public Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
         {
             throw new InvalidOperationException("Auth provider error");
         }

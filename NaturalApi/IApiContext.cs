@@ -81,6 +81,15 @@ public interface IApiContext
     IApiContext AsUser(string username);
 
     /// <summary>
+    /// Sets the username and password context for authentication.
+    /// Both credentials will be passed to the auth provider for token resolution.
+    /// </summary>
+    /// <param name="username">Username for authentication context</param>
+    /// <param name="password">Password for authentication</param>
+    /// <returns>New context with username and password set</returns>
+    IApiContext AsUser(string username, string password);
+
+    /// <summary>
     /// Sets a timeout for the request.
     /// </summary>
     /// <param name="timeout">Request timeout</param>

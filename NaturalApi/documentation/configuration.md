@@ -21,6 +21,9 @@
 The simplest way to configure NaturalApi is through the constructor:
 
 ```csharp
+// Ultra-simple: No configuration needed
+var api = new Api();
+
 // With base URL
 var api = new Api("https://api.example.com");
 
@@ -28,6 +31,69 @@ var api = new Api("https://api.example.com");
 var httpClient = new HttpClient();
 var api = new Api(new HttpClientExecutor(httpClient));
 ```
+
+### Using NaturalApiConfiguration (Recommended)
+
+For more complex scenarios, use the new `NaturalApiConfiguration` class with its fluent factory methods:
+
+```csharp
+// Simple base URL configuration
+var config = NaturalApiConfiguration.WithBaseUrl("https://api.example.com");
+
+// With authentication
+var config = NaturalApiConfiguration.WithBaseUrlAndAuth(
+    "https://api.example.com", 
+    myAuthProvider);
+
+// With named HttpClient
+var config = NaturalApiConfiguration.WithHttpClientAndAuth(
+    "MyApiClient", 
+    myAuthProvider);
+```
+
+This configuration approach is especially useful with dependency injection, as we'll see in the [Dependency Injection Guide](di.md).
+
+---
+
+## NaturalApiConfiguration Factory Methods
+
+The `NaturalApiConfiguration` class provides several factory methods for common scenarios:
+
+### WithBaseUrl()
+```csharp
+var config = NaturalApiConfiguration.WithBaseUrl("https://api.example.com");
+// Use with: services.AddNaturalApi(config);
+```
+
+### WithAuth()
+```csharp
+var config = NaturalApiConfiguration.WithAuth(myAuthProvider);
+// Use with: services.AddNaturalApi(config);
+```
+
+### WithBaseUrlAndAuth()
+```csharp
+var config = NaturalApiConfiguration.WithBaseUrlAndAuth(
+    "https://api.example.com", 
+    myAuthProvider);
+// Use with: services.AddNaturalApi(config);
+```
+
+### WithHttpClient()
+```csharp
+var config = NaturalApiConfiguration.WithHttpClient("MyApiClient");
+// Use with: services.AddNaturalApi(config);
+```
+
+### WithHttpClientAndAuth()
+```csharp
+var config = NaturalApiConfiguration.WithHttpClientAndAuth(
+    "MyApiClient", 
+    myAuthProvider);
+// Use with: services.AddNaturalApi(config);
+```
+
+These factory methods make it easy to configure NaturalApi in a readable, fluent way.
 
 ---
 
@@ -377,19 +443,71 @@ public class ApiSettings
     public Dictionary<string, string> DefaultHeaders { get; set; } = new();
 }
 
-// Usage
+// Usage with NaturalApiConfiguration
 services.Configure<ApiSettings>(configuration.GetSection("ApiSettings"));
 
 services.AddNaturalApi(provider =>
 {
     var options = provider.GetRequiredService<IOptions<ApiSettings>>().Value;
-    var defaults = new DefaultApiDefaults(
-        baseUri: new Uri(options.BaseUrl),
-        defaultHeaders: options.DefaultHeaders,
-        timeout: TimeSpan.FromSeconds(options.TimeoutSeconds)
-    );
-    return new Api(new HttpClientExecutor(new HttpClient()), defaults);
+    var config = NaturalApiConfiguration.WithBaseUrl(options.BaseUrl);
+    return new Api(new HttpClientExecutor(new HttpClient()), config);
 });
+```
+
+### Strongly-Typed Configuration
+
+For even better type safety, use strongly-typed configuration classes:
+
+```csharp
+public class NaturalApiSettings
+{
+    public string BaseUrl { get; set; } = string.Empty;
+    public string AuthBaseUrl { get; set; } = string.Empty;
+    public string AuthEndpoint { get; set; } = "/auth/login";
+    public string HttpClientName { get; set; } = "NaturalApiClient";
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
+}
+
+// In Program.cs or Startup.cs
+services.Configure<NaturalApiSettings>(configuration.GetSection("NaturalApiSettings"));
+
+// Use in service registration
+services.AddNaturalApi(provider =>
+{
+    var settings = provider.GetRequiredService<IOptions<NaturalApiSettings>>().Value;
+    var config = NaturalApiConfiguration.WithBaseUrl(settings.BaseUrl);
+    return new Api(new HttpClientExecutor(new HttpClient()), config);
+});
+```
+
+### Environment-Specific Configuration
+
+```csharp
+// appsettings.Development.json
+{
+  "ApiSettings": {
+    "BaseUrl": "https://dev-api.example.com"
+  }
+}
+
+// appsettings.Production.json
+{
+  "ApiSettings": {
+    "BaseUrl": "https://api.example.com"
+  }
+}
+
+// Configuration with environment overrides
+var configuration = new ConfigurationBuilder()
+    .SetBasePath(Directory.GetCurrentDirectory())
+    .AddJsonFile("appsettings.json", optional: false)
+    .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")}.json", optional: true)
+    .AddInMemoryCollection(new Dictionary<string, string?>
+    {
+        // Test environment overrides
+        ["ApiSettings:BaseUrl"] = "https://test-api.example.com"
+    })
+    .Build();
 ```
 
 ---

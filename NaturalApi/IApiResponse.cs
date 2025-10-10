@@ -1,4 +1,3 @@
-// AIModified:2025-10-09T07:52:56Z
 namespace NaturalApi;
 
 /// <summary>

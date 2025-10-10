@@ -10,6 +10,7 @@
 - [Context Interfaces](#context-interfaces)
 - [Execution Interfaces](#execution-interfaces)
 - [Authentication Interfaces](#authentication-interfaces)
+- [Configuration Classes](#configuration-classes)
 - [Configuration Interfaces](#configuration-interfaces)
 - [Validation Interfaces](#validation-interfaces)
 - [Exception Classes](#exception-classes)
@@ -43,6 +44,90 @@ var context = api.For("/users");
 
 ---
 
+## Configuration Classes
+
+### NaturalApiConfiguration
+
+A fluent configuration class that provides factory methods for common NaturalApi setup scenarios.
+
+```csharp
+public class NaturalApiConfiguration
+{
+    /// <summary>
+    /// The base URL for the API. If not provided, absolute URLs must be used in For() calls.
+    /// </summary>
+    public string? BaseUrl { get; set; }
+
+    /// <summary>
+    /// The name of the HttpClient to use. If not provided, a default HttpClient will be used.
+    /// </summary>
+    public string? HttpClientName { get; set; }
+
+    /// <summary>
+    /// The auth provider to use for authentication.
+    /// </summary>
+    public IApiAuthProvider? AuthProvider { get; set; }
+
+    /// <summary>
+    /// Creates a simple configuration with just a base URL.
+    /// </summary>
+    /// <param name="baseUrl">The base URL for the API</param>
+    /// <returns>A configuration with the specified base URL</returns>
+    public static NaturalApiConfiguration WithBaseUrl(string baseUrl);
+
+    /// <summary>
+    /// Creates a configuration with a named HttpClient.
+    /// </summary>
+    /// <param name="httpClientName">The name of the HttpClient to use</param>
+    /// <returns>A configuration with the specified HttpClient name</returns>
+    public static NaturalApiConfiguration WithHttpClient(string httpClientName);
+
+    /// <summary>
+    /// Creates a configuration with an auth provider.
+    /// </summary>
+    /// <param name="authProvider">The auth provider to use</param>
+    /// <returns>A configuration with the specified auth provider</returns>
+    public static NaturalApiConfiguration WithAuth(IApiAuthProvider authProvider);
+
+    /// <summary>
+    /// Creates a configuration with both base URL and auth provider.
+    /// </summary>
+    /// <param name="baseUrl">The base URL for the API</param>
+    /// <param name="authProvider">The auth provider to use</param>
+    /// <returns>A configuration with the specified base URL and auth provider</returns>
+    public static NaturalApiConfiguration WithBaseUrlAndAuth(string baseUrl, IApiAuthProvider authProvider);
+
+    /// <summary>
+    /// Creates a configuration with both HttpClient name and auth provider.
+    /// </summary>
+    /// <param name="httpClientName">The name of the HttpClient to use</param>
+    /// <param name="authProvider">The auth provider to use</param>
+    /// <returns>A configuration with the specified HttpClient name and auth provider</returns>
+    public static NaturalApiConfiguration WithHttpClientAndAuth(string httpClientName, IApiAuthProvider authProvider);
+}
+```
+
+**Usage:**
+```csharp
+// Simple base URL configuration
+var config = NaturalApiConfiguration.WithBaseUrl("https://api.example.com");
+
+// With authentication
+var config = NaturalApiConfiguration.WithBaseUrlAndAuth(
+    "https://api.example.com", 
+    myAuthProvider);
+
+// With named HttpClient
+var config = NaturalApiConfiguration.WithHttpClientAndAuth(
+    "MyApiClient", 
+    myAuthProvider);
+
+// Use with dependency injection
+services.AddNaturalApi(config);
+```
+
+---
+
 ## Context Interfaces
 
 ### IApiContext
@@ -68,7 +153,7 @@ public interface IApiContext
     IApiContext UsingAuth(string schemeOrToken);
     IApiContext UsingToken(string token);
     IApiContext WithoutAuth();
-    IApiContext AsUser(string username);
+    IApiContext AsUser(string username, string password);
 
     // Configuration methods
     IApiContext WithTimeout(TimeSpan timeout);
@@ -89,11 +174,17 @@ public interface IApiContext
 
 **Usage:**
 ```csharp
+// Traditional token authentication
 var result = await api.For("/users")
     .WithHeader("Accept", "application/json")
     .WithQueryParam("page", 1)
     .WithPathParam("id", 123)
     .UsingAuth("Bearer token")
+    .Get();
+
+// New username/password authentication
+var result = await api.For("/protected")
+    .AsUser("myusername", "mypassword")
     .Get();
 ```
 

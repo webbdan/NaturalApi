@@ -1,379 +1,293 @@
-## 🔧 Developer Spec: Auth Integration in NaturalApi
+# Dependency Injection Guide
 
-### **Overview**
-
-Authentication is managed via **`IApiAuthProvider`**, a simple DI-resolvable interface that provides tokens to be automatically added to outgoing requests.
-
-Developers can:
-
-* Register their own implementation in DI.
-* Decide how tokens are fetched (static, cached, per-user, etc.).
-* Override or disable auth per request (`.WithoutAuth()`).
-
-NaturalApi itself provides a default `HttpClientAuthExecutor` that respects whatever `IApiAuthProvider` is registered.
+> NaturalApi provides flexible dependency injection patterns to fit any application architecture. This guide shows you 8 different ways to register NaturalApi, from ultra-simple to highly customized.
 
 ---
 
-### **Interfaces**
+## Table of Contents
 
-#### **IApiAuthProvider**
-
-The contract for all authentication providers.
-
-```csharp
-public interface IApiAuthProvider
-{
-    /// <summary>
-    /// Returns a valid auth token (without the scheme).
-    /// Returning null means no auth header will be added.
-    /// </summary>
-    Task<string?> GetAuthTokenAsync(string? username = null);
-}
-```
+- [Quick Start](#quick-start)
+- [8 DI Registration Patterns](#8-di-registration-patterns)
+- [Which Pattern Should I Use?](#which-pattern-should-i-use)
+- [Advanced Patterns](#advanced-patterns)
+- [Multiple API Instances](#multiple-api-instances)
+- [Best Practices](#best-practices)
 
 ---
 
-### **IApiDefaultsProvider**
+## Quick Start
 
-Defaults can include base URL, timeout, default headers, and optionally an auth provider.
-
-```csharp
-public interface IApiDefaultsProvider
-{
-    Uri? BaseUri { get; }
-    IDictionary<string, string> DefaultHeaders { get; }
-    TimeSpan Timeout { get; }
-    IApiAuthProvider? AuthProvider { get; }
-}
-```
-
-Default implementations of both are registered via DI. If none is provided, NaturalApi just skips auth entirely.
-
----
-
-## ⚙️ Implementation Example
-
-### **ServiceCollectionExtensions**
-
-NaturalApi provides extension methods for easy DI registration:
+The simplest way to get started with NaturalApi and DI:
 
 ```csharp
-// Basic registration
+// Program.cs or Startup.cs
 services.AddNaturalApi();
 
-// With configuration
-services.AddNaturalApi(options =>
+// Use in your services
+public class UserService
 {
-    options.RegisterDefaults = true;
-});
-
-// With custom defaults provider
-services.AddNaturalApi<MyDefaultsProvider>(new MyDefaultsProvider());
-
-// With auth provider
-services.AddNaturalApiWithAuth<MyAuthProvider>(new MyAuthProvider());
-
-// With both defaults and auth
-services.AddNaturalApiWithAuth<MyDefaults, MyAuth>(new MyDefaults(), new MyAuth());
-
-// With custom factory
-services.AddNaturalApi(provider =>
-{
-    var httpClient = provider.GetRequiredService<HttpClient>();
-    var defaults = provider.GetRequiredService<IApiDefaultsProvider>();
-    return new Api(new HttpClientExecutor(httpClient), defaults);
-});
-```
-
-### **Manual DI Setup**
-
-```csharp
-services.AddSingleton<IApiDefaultsProvider, DefaultApiDefaults>();
-services.AddSingleton<IApiAuthProvider, CachingAuthProvider>();
-services.AddHttpClient();
-services.AddSingleton<IApi, Api>();
-```
-
-### **DefaultApiDefaults.cs**
-
-```csharp
-public class DefaultApiDefaults : IApiDefaultsProvider
-{
-    public Uri? BaseUri => new("https://api.mycompany.com/");
-    public IDictionary<string, string> DefaultHeaders => new Dictionary<string, string>
+    private readonly IApi _api;
+    
+    public UserService(IApi api)
     {
-        { "Accept", "application/json" }
-    };
-    public TimeSpan Timeout => TimeSpan.FromSeconds(30);
-    public IApiAuthProvider? AuthProvider { get; }
-
-    public DefaultApiDefaults(IApiAuthProvider? authProvider = null)
+        _api = api;
+    }
+    
+    public async Task<List<User>> GetUsers()
     {
-        AuthProvider = authProvider;
+        return await _api.For("https://api.example.com/users")
+            .Get()
+            .ShouldReturn<List<User>>();
     }
 }
 ```
 
----
-
-### **Example Auth Provider**
-
-```csharp
-public class CachingAuthProvider : IApiAuthProvider
-{
-    private string? _token;
-    private DateTime _expires;
-
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
-    {
-        if (_token == null || DateTime.UtcNow > _expires)
-        {
-            var newToken = await FetchNewTokenAsync();
-            _token = newToken.Token;
-            _expires = DateTime.UtcNow.AddMinutes(newToken.ExpiresInMinutes - 1);
-        }
-        return _token;
-    }
-
-    private Task<(string Token, int ExpiresInMinutes)> FetchNewTokenAsync()
-        => Task.FromResult(("abc123", 30));
-}
-```
+That's it! NaturalApi is now registered and ready to use.
 
 ---
 
-## 🚀 Usage in Tests
+## 8 DI Registration Patterns
 
-### **1. Using DI to Create Api Instance**
+NaturalApi offers 8 different registration patterns, from ultra-simple to highly customized. Choose the one that fits your needs.
+
+### Pattern 1: Ultra Simple (No Configuration)
+
+**When to use:** Quick prototyping, simple applications, or when you want to use absolute URLs.
 
 ```csharp
+services.AddNaturalApi();
+
+// Usage - must use absolute URLs
 var api = serviceProvider.GetRequiredService<IApi>();
+var result = api.For("https://api.example.com/users").Get();
 ```
 
-Or, if you’re not using DI in tests:
+**Pros:** Zero configuration, works immediately
+**Cons:** Must use absolute URLs, no base URL convenience
+
+### Pattern 2: With Base URL
+
+**When to use:** When you have a single API with a consistent base URL.
 
 ```csharp
-var api = new NaturalApi(httpClient, defaults);
+services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrl("https://api.example.com"));
+
+// Usage - can use relative URLs
+var api = serviceProvider.GetRequiredService<IApi>();
+var result = api.For("/users").Get();
 ```
 
----
+**Pros:** Clean relative URLs, simple setup
+**Cons:** No authentication, single API only
 
-### **2. Simple Authenticated Call**
+### Pattern 3: With Auth Provider
+
+**When to use:** When you need authentication but want to use absolute URLs.
 
 ```csharp
-var resp = await api
-    .For("/users/me")
-    .Get()
-    .ShouldReturn<UserResponse>();
+services.AddNaturalApi(NaturalApiConfiguration.WithAuth(myAuthProvider));
+
+// Usage - must use absolute URLs but with auth
+var api = serviceProvider.GetRequiredService<IApi>();
+var result = api.For("https://api.example.com/protected").AsUser("user", "pass").Get();
 ```
 
-NaturalApi automatically:
+**Pros:** Authentication included, flexible URL usage
+**Cons:** Must use absolute URLs, auth provider manages its own URLs
 
-1. Resolves the base URI (`https://api.mycompany.com/users/me`).
-2. Fetches the token via `IApiAuthProvider.GetAuthTokenAsync()`.
-3. Adds the header: `Authorization: Bearer abc123`.
+### Pattern 4: With Base URL and Auth (Recommended)
 
-You didn’t need to touch a thing.
-
----
-
-### **3. Call Without Auth**
+**When to use:** Most common pattern - single API with authentication.
 
 ```csharp
-var resp = await api
-    .For("/public/info")
-    .WithoutAuth()
-    .Get()
-    .ShouldReturn<PublicInfo>();
+services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+    "https://api.example.com", 
+    myAuthProvider));
+
+// Usage - clean relative URLs with authentication
+var api = serviceProvider.GetRequiredService<IApi>();
+var result = api.For("/protected").AsUser("user", "pass").Get();
 ```
 
-`.WithoutAuth()` simply skips invoking the auth provider for that call.
+**Pros:** Best of both worlds - clean URLs and authentication
+**Cons:** Single API only
 
----
+### Pattern 5: With Named HttpClient
 
-### **4. Per-User Token Example**
-
-If you want multi-user tests:
-
-```csharp
-var resp = await api
-    .For("/users")
-    .AsUser("dan")
-    .Get()
-    .ShouldReturn<UserList>();
-```
-
-`AsUser()` sets a contextual username that’s passed into `IApiAuthProvider.GetAuthTokenAsync("dan")`.
-
----
-
-## 🧠 Internal Request Flow
-
-Here’s the high-level sequence inside the NaturalApi engine:
-
-1. **Build Phase:**
-   Collect all configured values: endpoint, headers, body, timeout, etc.
-
-2. **Resolve URI:**
-   Combine `BaseUri` and relative path (unless absolute provided).
-
-3. **Apply Defaults:**
-   Add global headers from `IApiDefaultsProvider`.
-
-4. **Auth Resolution:**
-
-   ```csharp
-   if (!_suppressAuth && _defaults.AuthProvider != null)
-   {
-       var token = await _defaults.AuthProvider.GetAuthTokenAsync(_user);
-       if (!string.IsNullOrEmpty(token))
-           request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-   }
-   ```
-
-5. **Execute Request:**
-   Use injected `IHttpExecutor` (defaulting to `HttpClientExecutor`).
-
-6. **Return Typed Response:**
-   Deserialise response body into `T` in `.ShouldReturn<T>()`.
-
----
-
-## 🧩 Why It Works
-
-| Principle            | Implementation                                   |
-| -------------------- | ------------------------------------------------ |
-| **Natural syntax**   | `.For(...).Get().ShouldReturn<T>()`              |
-| **No boilerplate**   | Auth handled automatically via DI                |
-| **Simple overrides** | `.WithoutAuth()` or `.AsUser()` per call         |
-| **Flexible**         | Works with any token source                      |
-| **Clean separation** | Core doesn’t know or care how tokens are managed |
-
----
-
-## ✅ Example End-to-End Usage
+**When to use:** When you need custom HttpClient configuration.
 
 ```csharp
-[Fact]
-public async Task Get_Current_User_Should_Return_Valid_Response()
+// Configure named HttpClient
+services.AddHttpClient("MyApiClient", client =>
 {
-    var resp = await api
-        .For("/users/me")
-        .Get()
-        .ShouldReturn<UserResponse>();
+    client.BaseAddress = new Uri("https://api.example.com");
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
 
-    resp.Name.ShouldBe("Dan");
-    resp.Role.ShouldBe("Tester");
-}
+services.AddNaturalApi(NaturalApiConfiguration.WithHttpClientAndAuth(
+    "MyApiClient", 
+    myAuthProvider));
+
+// Usage
+var api = serviceProvider.GetRequiredService<IApi>();
+var result = api.For("/users").AsUser("user", "pass").Get();
 ```
 
-No boilerplate. No headers scattered around. No static token mess. Just clean, natural English-style API testing.
+**Pros:** Full HttpClient control, authentication included
+**Cons:** More setup required
 
----
+### Pattern 6: With Configuration
 
-## 🔧 Advanced DI Scenarios
-
-### **Multi-Environment Configuration**
-
-```csharp
-public class EnvironmentApiDefaults : IApiDefaultsProvider
-{
-    private readonly string _environment;
-    private readonly IConfiguration _configuration;
-
-    public EnvironmentApiDefaults(IConfiguration configuration)
-    {
-        _configuration = configuration;
-        _environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
-    }
-
-    public Uri? BaseUri => _environment switch
-    {
-        "Development" => new Uri("https://dev-api.example.com"),
-        "Staging" => new Uri("https://staging-api.example.com"),
-        "Production" => new Uri("https://api.example.com"),
-        _ => new Uri("https://localhost:5001")
-    };
-
-    public IDictionary<string, string> DefaultHeaders => new Dictionary<string, string>
-    {
-        ["Accept"] = "application/json",
-        ["X-Environment"] = _environment,
-        ["X-Version"] = _configuration["ApiSettings:Version"]
-    };
-
-    public TimeSpan Timeout => _environment == "Production" 
-        ? TimeSpan.FromSeconds(30) 
-        : TimeSpan.FromSeconds(60);
-
-    public IApiAuthProvider? AuthProvider => _environment != "Development" 
-        ? new EnvironmentAuthProvider(_configuration)
-        : null;
-}
-```
-
-### **Scoped Authentication**
+**When to use:** When you want to read settings from configuration files.
 
 ```csharp
-public class UserScopedAuthProvider : IApiAuthProvider
+// appsettings.json
 {
-    private readonly ICurrentUserService _currentUser;
-    private readonly ITokenService _tokenService;
-
-    public UserScopedAuthProvider(ICurrentUserService currentUser, ITokenService tokenService)
-    {
-        _currentUser = currentUser;
-        _tokenService = tokenService;
-    }
-
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
-    {
-        var user = username != null 
-            ? await _currentUser.GetUserAsync(username)
-            : _currentUser.GetCurrentUser();
-        
-        return await _tokenService.GetTokenForUserAsync(user.Id);
-    }
+  "ApiSettings": {
+    "BaseUrl": "https://api.example.com",
+    "AuthBaseUrl": "https://auth.example.com"
+  }
 }
 
 // Registration
-services.AddScoped<IApiAuthProvider, UserScopedAuthProvider>();
-services.AddScoped<IApi>(provider =>
+var configuration = new ConfigurationBuilder()
+    .SetBasePath(Directory.GetCurrentDirectory())
+    .AddJsonFile("appsettings.json", optional: false)
+    .Build();
+
+services.AddSingleton<IConfiguration>(configuration);
+
+var apiBaseUrl = configuration["ApiSettings:BaseUrl"];
+services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+    apiBaseUrl!,
+    new SimpleCustomAuthProvider(
+        new HttpClient { BaseAddress = new Uri(configuration["ApiSettings:AuthBaseUrl"]!) },
+        "/auth/login")));
+```
+
+**Pros:** Environment-specific configuration, externalized settings
+**Cons:** More complex setup
+
+### Pattern 7: With Factory (Maximum Flexibility)
+
+**When to use:** When you need complete control over the API instance creation.
+
+```csharp
+services.AddHttpClient("ApiClient", client =>
 {
-    var httpClient = provider.GetRequiredService<HttpClient>();
-    var authProvider = provider.GetRequiredService<IApiAuthProvider>();
+    client.BaseAddress = new Uri("https://api.example.com");
+});
+
+services.AddHttpClient("AuthClient", client =>
+{
+    client.BaseAddress = new Uri("https://auth.example.com");
+});
+
+services.AddNaturalApi(provider =>
+{
+    var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+    var httpClient = httpClientFactory.CreateClient("ApiClient");
+    var authHttpClient = httpClientFactory.CreateClient("AuthClient");
+    var authProvider = new SimpleCustomAuthProvider(authHttpClient, "/auth/login");
     var defaults = new DefaultApiDefaults(authProvider: authProvider);
-    return new Api(new HttpClientExecutor(httpClient), defaults);
+    return new Api(defaults, httpClient);
 });
 ```
 
-### **Multiple API Endpoints**
+**Pros:** Complete control, can use any constructor
+**Cons:** Most complex, requires understanding of internals
+
+### Pattern 8: With Custom API
+
+**When to use:** When you need a custom API implementation with advanced features.
 
 ```csharp
-// Register multiple API instances
+services.AddHttpClient("ApiClient", client =>
+{
+    client.BaseAddress = new Uri("https://api.example.com");
+});
+
+services.AddHttpClient("AuthClient", client =>
+{
+    client.BaseAddress = new Uri("https://auth.example.com");
+});
+
+services.AddNaturalApi<SimpleCustomAuthProvider, CustomApi>(
+    "ApiClient",
+    provider => new SimpleCustomAuthProvider(
+        provider.GetRequiredService<IHttpClientFactory>().CreateClient("AuthClient"),
+        "/auth/login"),
+    provider =>
+    {
+        var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+        var httpClient = httpClientFactory.CreateClient("ApiClient");
+        var executor = new HttpClientExecutor(httpClient);
+        var defaults = provider.GetRequiredService<IApiDefaultsProvider>();
+        return new CustomApi(executor, defaults, httpClient);
+    });
+```
+
+**Pros:** Custom API implementation, advanced features
+**Cons:** Most complex, requires custom API class
+
+---
+
+## Which Pattern Should I Use?
+
+Use this decision tree to choose the right pattern:
+
+```
+Do you need authentication?
+├─ No
+│  ├─ Do you want to use relative URLs?
+│  │  ├─ Yes → Pattern 2 (With Base URL)
+│  │  └─ No → Pattern 1 (Ultra Simple)
+│  └─ Do you need custom HttpClient config?
+│     ├─ Yes → Pattern 5 (With Named HttpClient)
+│     └─ No → Pattern 2 (With Base URL)
+└─ Yes
+   ├─ Do you want to use relative URLs?
+   │  ├─ Yes → Pattern 4 (With Base URL and Auth) ⭐ RECOMMENDED
+   │  └─ No → Pattern 3 (With Auth Provider)
+   ├─ Do you need configuration from files?
+   │  └─ Yes → Pattern 6 (With Configuration)
+   ├─ Do you need complete control?
+   │  └─ Yes → Pattern 7 (With Factory)
+   └─ Do you need custom API implementation?
+      └─ Yes → Pattern 8 (With Custom API)
+```
+
+### Quick Recommendations
+
+- **Getting started:** Pattern 1 (Ultra Simple)
+- **Most applications:** Pattern 4 (With Base URL and Auth)
+- **Multiple environments:** Pattern 6 (With Configuration)
+- **Custom requirements:** Pattern 7 (With Factory)
+
+---
+
+## Advanced Patterns
+
+### Multiple API Instances
+
+You can register multiple API instances for different services:
+
+```csharp
+// User API
 services.AddHttpClient("UserApi", client =>
 {
     client.BaseAddress = new Uri("https://user-api.example.com");
-    client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
 
+services.AddNaturalApi("UserApi", NaturalApiConfiguration.WithAuth(userAuthProvider));
+
+// Order API
 services.AddHttpClient("OrderApi", client =>
 {
     client.BaseAddress = new Uri("https://order-api.example.com");
-    client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
 
-services.AddNaturalApi("UserApi", provider =>
-{
-    var httpClient = provider.GetRequiredService<IHttpClientFactory>().CreateClient("UserApi");
-    return new Api(new HttpClientExecutor(httpClient));
-});
-
-services.AddNaturalApi("OrderApi", provider =>
-{
-    var httpClient = provider.GetRequiredService<IHttpClientFactory>().CreateClient("OrderApi");
-    return new Api(new HttpClientExecutor(httpClient));
-});
+services.AddNaturalApi("OrderApi", NaturalApiConfiguration.WithAuth(orderAuthProvider));
 
 // Usage in services
 public class OrderService
@@ -388,234 +302,278 @@ public class OrderService
         _userApi = userApi;
         _orderApi = orderApi;
     }
-    
-    public async Task<Order> CreateOrderAsync(CreateOrderRequest request)
+}
+```
+
+### Environment-Specific Registration
+
+```csharp
+public static class ServiceCollectionExtensions
+{
+    public static IServiceCollection AddNaturalApiForEnvironment(
+        this IServiceCollection services, 
+        IConfiguration configuration)
     {
-        // Get user details from User API
-        var user = await _userApi.For($"/users/{request.UserId}")
+        var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+        
+        return environment switch
+        {
+            "Development" => services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrl("https://dev-api.example.com")),
+            "Staging" => services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+                "https://staging-api.example.com", 
+                new DevAuthProvider())),
+            "Production" => services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+                "https://api.example.com", 
+                new ProductionAuthProvider())),
+            _ => services.AddNaturalApi()
+        };
+    }
+}
+```
+
+### Scoped vs Singleton Registration
+
+```csharp
+// For stateless operations (recommended)
+services.AddScoped<IApi>(provider => /* factory */);
+
+// For stateful operations (like session-based auth)
+services.AddScoped<IApi>(provider =>
+{
+    var httpClient = provider.GetRequiredService<HttpClient>();
+    var session = provider.GetRequiredService<ISessionService>();
+    return new Api(new HttpClientExecutor(httpClient), new SessionApiDefaults(session));
+});
+```
+
+---
+
+## Multiple API Instances
+
+### Using Keyed Services (.NET 8+)
+
+```csharp
+// Register multiple APIs
+services.AddNaturalApi("UserApi", NaturalApiConfiguration.WithBaseUrl("https://user-api.example.com"));
+services.AddNaturalApi("OrderApi", NaturalApiConfiguration.WithBaseUrl("https://order-api.example.com"));
+
+// Use in services
+public class OrderService
+{
+    private readonly IApi _userApi;
+    private readonly IApi _orderApi;
+    
+    public OrderService(
+        [FromKeyedServices("UserApi")] IApi userApi,
+        [FromKeyedServices("OrderApi")] IApi orderApi)
+    {
+        _userApi = userApi;
+        _orderApi = orderApi;
+    }
+    
+    public async Task<Order> CreateOrderAsync(int userId, OrderRequest request)
+    {
+        // Verify user exists
+        var user = await _userApi.For($"/users/{userId}")
             .Get()
             .ShouldReturn<User>();
-        
-        // Create order in Order API
+            
+        // Create order
         var order = await _orderApi.For("/orders")
             .Post(request)
-            .ShouldReturn<Order>(status: 201);
-        
+            .ShouldReturn<Order>();
+            
         return order;
     }
 }
 ```
 
-### **Configuration-Based Setup**
-
-```csharp
-// appsettings.json
-{
-  "ApiSettings": {
-    "BaseUrl": "https://api.example.com",
-    "TimeoutSeconds": 30,
-    "DefaultHeaders": {
-      "Accept": "application/json",
-      "User-Agent": "MyApp/1.0"
-    },
-    "Auth": {
-      "ClientId": "your-client-id",
-      "ClientSecret": "your-client-secret",
-      "TokenEndpoint": "https://auth.example.com/token"
-    }
-  }
-}
-
-// Configuration class
-public class ApiSettings
-{
-    public string BaseUrl { get; set; } = string.Empty;
-    public int TimeoutSeconds { get; set; } = 30;
-    public Dictionary<string, string> DefaultHeaders { get; set; } = new();
-    public AuthSettings Auth { get; set; } = new();
-}
-
-public class AuthSettings
-{
-    public string ClientId { get; set; } = string.Empty;
-    public string ClientSecret { get; set; } = string.Empty;
-    public string TokenEndpoint { get; set; } = string.Empty;
-}
-
-// Registration
-services.Configure<ApiSettings>(configuration.GetSection("ApiSettings"));
-
-services.AddNaturalApi(provider =>
-{
-    var options = provider.GetRequiredService<IOptions<ApiSettings>>().Value;
-    var httpClient = provider.GetRequiredService<HttpClient>();
-    
-    var defaults = new DefaultApiDefaults(
-        baseUri: new Uri(options.BaseUrl),
-        defaultHeaders: options.DefaultHeaders,
-        timeout: TimeSpan.FromSeconds(options.TimeoutSeconds)
-    );
-    
-    var authProvider = new OAuth2AuthProvider(
-        options.Auth.ClientId,
-        options.Auth.ClientSecret,
-        options.Auth.TokenEndpoint,
-        httpClient
-    );
-    
-    return new Api(new HttpClientExecutor(httpClient), defaults);
-});
-```
-
-### **Testing with DI**
-
-```csharp
-[TestClass]
-public class ApiServiceTests
-{
-    private ServiceProvider _serviceProvider;
-    private IApi _api;
-
-    [TestInitialize]
-    public void Setup()
-    {
-        var services = new ServiceCollection();
-        
-        // Register test services
-        services.AddHttpClient();
-        services.AddSingleton<IApiDefaultsProvider, TestApiDefaults>();
-        services.AddSingleton<IApiAuthProvider, TestAuthProvider>();
-        services.AddNaturalApi();
-        
-        _serviceProvider = services.BuildServiceProvider();
-        _api = _serviceProvider.GetRequiredService<IApi>();
-    }
-
-    [TestCleanup]
-    public void Cleanup()
-    {
-        _serviceProvider?.Dispose();
-    }
-
-    [TestMethod]
-    public async Task GetUser_Should_Return_User_With_Auth()
-    {
-        var user = await _api.For("/users/1")
-            .Get()
-            .ShouldReturn<User>();
-
-        Assert.IsNotNull(user);
-        Assert.AreEqual(1, user.Id);
-    }
-}
-
-public class TestApiDefaults : IApiDefaultsProvider
-{
-    public Uri? BaseUri => new Uri("https://test-api.example.com");
-    public IDictionary<string, string> DefaultHeaders => new Dictionary<string, string>
-    {
-        ["Accept"] = "application/json"
-    };
-    public TimeSpan Timeout => TimeSpan.FromSeconds(30);
-    public IApiAuthProvider? AuthProvider => new TestAuthProvider();
-}
-
-public class TestAuthProvider : IApiAuthProvider
-{
-    public Task<string?> GetAuthTokenAsync(string? username = null)
-    {
-        return Task.FromResult<string?>("test-token");
-    }
-}
-```
-
----
-
-## 🧠 Best Practices
-
-### **1. Use Appropriate Service Lifetimes**
-
-```csharp
-// Singleton for stateless services
-services.AddSingleton<IApiDefaultsProvider, MyDefaultsProvider>();
-
-// Scoped for user-specific services
-services.AddScoped<IApiAuthProvider, UserScopedAuthProvider>();
-
-// Transient for request-specific services
-services.AddTransient<IApi>(provider =>
-{
-    var httpClient = provider.GetRequiredService<HttpClient>();
-    return new Api(new HttpClientExecutor(httpClient));
-});
-```
-
-### **2. Handle Configuration Changes**
-
-```csharp
-public class ConfigurableApiDefaults : IApiDefaultsProvider
-{
-    private readonly IOptionsMonitor<ApiSettings> _options;
-
-    public ConfigurableApiDefaults(IOptionsMonitor<ApiSettings> options)
-    {
-        _options = options;
-    }
-
-    public Uri? BaseUri => new Uri(_options.CurrentValue.BaseUrl);
-    public IDictionary<string, string> DefaultHeaders => _options.CurrentValue.DefaultHeaders;
-    public TimeSpan Timeout => TimeSpan.FromSeconds(_options.CurrentValue.TimeoutSeconds);
-    public IApiAuthProvider? AuthProvider => null;
-}
-```
-
-### **3. Use Factory Pattern for Complex Scenarios**
+### Using Factory Pattern
 
 ```csharp
 public interface IApiFactory
 {
-    IApi CreateApi(string baseUrl);
-    IApi CreateApi(string baseUrl, IApiAuthProvider authProvider);
+    IApi CreateUserApi();
+    IApi CreateOrderApi();
 }
 
 public class ApiFactory : IApiFactory
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ILogger<ApiFactory> _logger;
-
-    public ApiFactory(IHttpClientFactory httpClientFactory, ILogger<ApiFactory> logger)
+    private readonly IServiceProvider _serviceProvider;
+    
+    public ApiFactory(IServiceProvider serviceProvider)
     {
-        _httpClientFactory = httpClientFactory;
-        _logger = logger;
+        _serviceProvider = serviceProvider;
     }
-
-    public IApi CreateApi(string baseUrl)
+    
+    public IApi CreateUserApi()
     {
-        var httpClient = _httpClientFactory.CreateClient();
-        var executor = new HttpClientExecutor(httpClient);
-        return new Api(executor);
+        var httpClient = _serviceProvider.GetRequiredService<IHttpClientFactory>()
+            .CreateClient("UserApi");
+        return new Api(new HttpClientExecutor(httpClient), new UserApiDefaults());
     }
-
-    public IApi CreateApi(string baseUrl, IApiAuthProvider authProvider)
+    
+    public IApi CreateOrderApi()
     {
-        var httpClient = _httpClientFactory.CreateClient();
-        var executor = new AuthenticatedHttpClientExecutor(httpClient);
-        var defaults = new DefaultApiDefaults(authProvider: authProvider);
-        return new Api(executor, defaults);
+        var httpClient = _serviceProvider.GetRequiredService<IHttpClientFactory>()
+            .CreateClient("OrderApi");
+        return new Api(new HttpClientExecutor(httpClient), new OrderApiDefaults());
     }
 }
+
+// Registration
+services.AddHttpClient("UserApi", client => client.BaseAddress = new Uri("https://user-api.example.com"));
+services.AddHttpClient("OrderApi", client => client.BaseAddress = new Uri("https://order-api.example.com"));
+services.AddSingleton<IApiFactory, ApiFactory>();
+```
+
+---
+
+## Best Practices
+
+### 1. Choose the Right Pattern
+
+- **Start simple:** Use Pattern 1 or 2 for new projects
+- **Add complexity gradually:** Move to Pattern 4 when you need authentication
+- **Use configuration:** Pattern 6 for multiple environments
+- **Custom only when needed:** Patterns 7 and 8 for special requirements
+
+### 2. HttpClient Configuration
+
+```csharp
+// Good: Configure HttpClient properly
+services.AddHttpClient("ApiClient", client =>
+{
+    client.BaseAddress = new Uri("https://api.example.com");
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Add("User-Agent", "MyApp/1.0");
+});
+
+// Bad: Using default HttpClient without configuration
+services.AddHttpClient();
+```
+
+### 3. Authentication Provider Design
+
+```csharp
+// Good: Auth provider manages its own URLs
+public class MyAuthProvider : IApiAuthProvider
+{
+    private readonly HttpClient _httpClient;
+    
+    public MyAuthProvider(HttpClient httpClient)
+    {
+        _httpClient = httpClient; // Pre-configured with auth service URL
+    }
+    
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
+    {
+        // Auth provider knows its own endpoint
+        var response = await _httpClient.PostAsync("/auth/login", content);
+        // ...
+    }
+}
+```
+
+### 4. Configuration Management
+
+```csharp
+// Good: Use strongly-typed configuration
+public class ApiSettings
+{
+    public string BaseUrl { get; set; } = string.Empty;
+    public string AuthBaseUrl { get; set; } = string.Empty;
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
+}
+
+services.Configure<ApiSettings>(configuration.GetSection("ApiSettings"));
+
+// Bad: Magic strings in configuration
+var baseUrl = configuration["SomeRandomKey:BaseUrl"];
+```
+
+### 5. Testing Considerations
+
+```csharp
+// Good: Easy to mock in tests
+public class UserService
+{
+    private readonly IApi _api;
+    
+    public UserService(IApi api)
+    {
+        _api = api;
+    }
+    
+    public async Task<User> GetUserAsync(int id)
+    {
+        return await _api.For($"/users/{id}")
+            .Get()
+            .ShouldReturn<User>();
+    }
+}
+
+// In tests
+var mockApi = new Mock<IApi>();
+var userService = new UserService(mockApi.Object);
+```
 
 ---
 
 ## Related Topics
 
-- **[Getting Started](getting-started.md)** - Basic setup and usage
-- **[Configuration](configuration.md)** - Configuration patterns and setup
-- **[Authentication](authentication.md)** - Authentication patterns and providers
-- **[Extensibility](extensibility.md)** - Creating custom implementations
-- **[Testing Guide](testing-guide.md)** - Testing with DI
-- **[API Reference](api-reference.md)** - ServiceCollectionExtensions documentation
-- **[Examples](examples.md)** - Real-world DI scenarios
-- **[Troubleshooting](troubleshooting.md)** - DI registration issues
-- **[Architecture Overview](architectureanddesign.md)** - Internal design and DI integration
+- **[Getting Started](getting-started.md)** - Basic setup and your first API call
+- **[Configuration](configuration.md)** - Setting up base URLs, timeouts, and default headers
+- **[Authentication](authentication.md)** - Setting up authentication providers
+- **[Testing Guide](testing-guide.md)** - Testing with dependency injection
+- **[Examples](examples.md)** - Real-world DI scenarios and patterns
+- **[API Reference](api-reference.md)** - Complete ServiceCollectionExtensions reference
+- **[Troubleshooting](troubleshooting.md)** - Common DI issues and solutions
+- **[Architecture Overview](architectureanddesign.md)** - Internal design and implementation details
+
+---
+
+## ServiceCollectionExtensions Reference
+
+### Basic Registration Methods
+
+```csharp
+// Ultra simple
+services.AddNaturalApi();
+
+// With configuration
+services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrl("https://api.example.com"));
+
+// With auth provider
+services.AddNaturalApi(NaturalApiConfiguration.WithAuth(myAuthProvider));
+
+// With both
+services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+    "https://api.example.com", 
+    myAuthProvider));
 ```
+
+### Advanced Registration Methods
+
+```csharp
+// With named HttpClient
+services.AddNaturalApi("MyApiClient", NaturalApiConfiguration.WithAuth(myAuthProvider));
+
+// With factory
+services.AddNaturalApi(provider => new Api(/* custom setup */));
+
+// With custom API implementation
+services.AddNaturalApi<MyAuthProvider, MyCustomApi>(
+    "MyApiClient",
+    provider => new MyAuthProvider(/* setup */),
+    provider => new MyCustomApi(/* setup */));
+```
+
+### Helper Methods
+
+```csharp
+// Convenience method for base URL + auth
+services.AddNaturalApiWithBaseUrl("https://api.example.com", myAuthProvider);
+```
+
+This covers all the dependency injection patterns available in NaturalApi. Choose the pattern that best fits your application's needs, and don't hesitate to start simple and evolve as requirements grow.

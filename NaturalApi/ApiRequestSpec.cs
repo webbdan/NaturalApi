@@ -13,6 +13,7 @@ namespace NaturalApi;
 /// <param name="Timeout">Request timeout</param>
 /// <param name="SuppressAuth">Whether to suppress authentication for this request</param>
 /// <param name="Username">Username context for per-user authentication</param>
+/// <param name="Password">Password context for authentication</param>
 /// <param name="Cookies">Request cookies to be sent with the request</param>
 public record ApiRequestSpec(
     string Endpoint,
@@ -24,6 +25,7 @@ public record ApiRequestSpec(
     TimeSpan? Timeout,
     bool SuppressAuth = false,
     string? Username = null,
+    string? Password = null,
     IDictionary<string, string> Cookies = null)
 {
     /// <summary>
@@ -182,6 +184,17 @@ public record ApiRequestSpec(
     public ApiRequestSpec AsUser(string username)
     {
         return this with { Username = username };
+    }
+
+    /// <summary>
+    /// Creates a new specification with username and password context for authentication.
+    /// </summary>
+    /// <param name="username">Username for authentication context</param>
+    /// <param name="password">Password for authentication</param>
+    /// <returns>New specification with username and password set</returns>
+    public ApiRequestSpec AsUser(string username, string password)
+    {
+        return this with { Username = username, Password = password };
     }
 
     /// <summary>

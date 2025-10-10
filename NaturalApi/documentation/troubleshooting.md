@@ -8,6 +8,10 @@
 
 - [Common Setup Issues](#common-setup-issues)
 - [Authentication Problems](#authentication-problems)
+- [AsUser() Authentication Issues](#asuser-authentication-issues)
+- [DI Pattern Selection](#di-pattern-selection)
+- [Base URL vs Absolute URLs](#base-url-vs-absolute-urls)
+- [WireMock Setup Issues](#wiremock-setup-issues)
 - [Deserialization Failures](#deserialization-failures)
 - [Timeout Issues](#timeout-issues)
 - [Base URL Resolution](#base-url-resolution)
@@ -187,6 +191,335 @@
        .AsUser("john.doe")
        .Get()
        .ShouldReturn<UserData>();
+   ```
+
+---
+
+## AsUser() Authentication Issues
+
+### Issue: "AsUser() not working" or "Authentication failed"
+
+**Symptoms:**
+- `AsUser()` method not found
+- Authentication always fails with 401
+- "No auth provider configured" errors
+
+**Solutions:**
+
+1. **Check Auth Provider Registration**
+   ```csharp
+   // Make sure you have an auth provider that supports username/password
+   services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+       "https://api.example.com",
+       new SimpleCustomAuthProvider(
+           new HttpClient { BaseAddress = new Uri("https://auth.example.com") },
+           "/auth/login")));
+   ```
+
+2. **Verify Auth Provider Implementation**
+   ```csharp
+   public class SimpleCustomAuthProvider : IApiAuthProvider
+   {
+       public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
+       {
+           // Make sure this method accepts both username and password
+           if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+           {
+               return null;
+           }
+           
+           // Your authentication logic here
+           return await AuthenticateAsync(username, password);
+       }
+   }
+   ```
+
+3. **Check WireMock Setup for Tests**
+   ```csharp
+   // Make sure your WireMock server is configured for the auth endpoint
+   _wireMockServer
+       .Given(WireMock.RequestBuilders.Request.Create()
+           .WithPath("/auth/login")
+           .UsingPost()
+           .WithBody("{\"username\":\"testuser\",\"password\":\"testpass\"}"))
+       .RespondWith(WireMock.ResponseBuilders.Response.Create()
+           .WithStatusCode(200)
+           .WithBody("{\"token\":\"valid-token\",\"expiresIn\":600}"));
+   ```
+
+4. **Debug Authentication Flow**
+   ```csharp
+   // Add logging to see what's happening
+   var result = await api.For("/protected").AsUser("testuser", "testpass").Get();
+   Console.WriteLine($"Status: {result.StatusCode}");
+   Console.WriteLine($"Body: {result.RawBody}");
+   ```
+
+### Issue: "Username/password authentication not supported"
+
+**Symptoms:**
+- Auth provider doesn't accept username/password parameters
+- `GetAuthTokenAsync` method signature mismatch
+
+**Solutions:**
+
+1. **Update Auth Provider Interface**
+   ```csharp
+   // Old interface (username only)
+   public interface IApiAuthProvider
+   {
+       Task<string?> GetAuthTokenAsync(string? username = null);
+   }
+
+   // New interface (username and password)
+   public interface IApiAuthProvider
+   {
+       Task<string?> GetAuthTokenAsync(string? username = null, string? password = null);
+   }
+   ```
+
+2. **Implement Username/Password Support**
+   ```csharp
+   public class MyAuthProvider : IApiAuthProvider
+   {
+       public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
+       {
+           if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+           {
+               return null;
+           }
+
+           // Call your authentication service
+           var response = await _httpClient.PostAsync("/auth/login", 
+               new StringContent(JsonSerializer.Serialize(new { username, password })));
+           
+           if (response.IsSuccessStatusCode)
+           {
+               var content = await response.Content.ReadAsStringAsync();
+               var authResponse = JsonSerializer.Deserialize<AuthResponse>(content);
+               return authResponse?.Token;
+           }
+           
+           return null;
+       }
+   }
+   ```
+
+---
+
+## DI Pattern Selection
+
+### Issue: "Which DI pattern should I use?"
+
+**Symptoms:**
+- Confusion about which registration method to use
+- Multiple patterns available but unclear which to choose
+
+**Solutions:**
+
+1. **Use the Decision Tree**
+   ```
+   Do you need authentication?
+   ├─ No → Pattern 1 (Ultra Simple) or Pattern 2 (With Base URL)
+   └─ Yes
+      ├─ Want relative URLs? → Pattern 4 (With Base URL and Auth) ⭐ RECOMMENDED
+      ├─ Need configuration? → Pattern 6 (With Configuration)
+      ├─ Need custom control? → Pattern 7 (With Factory)
+      └─ Need custom API? → Pattern 8 (With Custom API)
+   ```
+
+2. **Start Simple, Evolve as Needed**
+   ```csharp
+   // Start with Pattern 1 (Ultra Simple)
+   services.AddNaturalApi();
+
+   // Add base URL when needed (Pattern 2)
+   services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrl("https://api.example.com"));
+
+   // Add authentication when needed (Pattern 4)
+   services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+       "https://api.example.com", 
+       myAuthProvider));
+   ```
+
+3. **Common Patterns by Use Case**
+   ```csharp
+   // Quick prototyping
+   services.AddNaturalApi();
+
+   // Most applications
+   services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+       "https://api.example.com", 
+       myAuthProvider));
+
+   // Multiple environments
+   services.AddNaturalApi(provider => 
+   {
+       var config = provider.GetRequiredService<IConfiguration>();
+       var baseUrl = config["ApiSettings:BaseUrl"];
+       return new Api(baseUrl, myAuthProvider);
+   });
+   ```
+
+---
+
+## Base URL vs Absolute URLs
+
+### Issue: "When to use base URL vs absolute URLs?"
+
+**Symptoms:**
+- Confusion about when to set a base URL
+- Errors when mixing relative and absolute URLs
+
+**Solutions:**
+
+1. **Use Base URL When:**
+   - Calling the same API repeatedly
+   - Want clean relative URLs (`/users` instead of `https://api.example.com/users`)
+   - Have a consistent API endpoint
+
+   ```csharp
+   // Set base URL once
+   var api = new Api("https://api.example.com");
+   
+   // Use relative URLs
+   var users = await api.For("/users").Get().ShouldReturn<List<User>>();
+   var user = await api.For("/users/1").Get().ShouldReturn<User>();
+   ```
+
+2. **Use Absolute URLs When:**
+   - Calling different APIs
+   - No consistent base URL
+   - Quick prototyping
+
+   ```csharp
+   // No base URL needed
+   var api = new Api();
+   
+   // Use absolute URLs
+   var users = await api.For("https://api.example.com/users").Get().ShouldReturn<List<User>>();
+   var orders = await api.For("https://orders.example.com/orders").Get().ShouldReturn<List<Order>>();
+   ```
+
+3. **Mixed Approach**
+   ```csharp
+   // Multiple APIs with different base URLs
+   services.AddNaturalApi("UserApi", NaturalApiConfiguration.WithBaseUrl("https://users.example.com"));
+   services.AddNaturalApi("OrderApi", NaturalApiConfiguration.WithBaseUrl("https://orders.example.com"));
+   
+   // Use in services
+   public class OrderService
+   {
+       private readonly IApi _userApi;
+       private readonly IApi _orderApi;
+       
+       public OrderService(
+           [FromKeyedServices("UserApi")] IApi userApi,
+           [FromKeyedServices("OrderApi")] IApi orderApi)
+       {
+           _userApi = userApi;
+           _orderApi = orderApi;
+       }
+   }
+   ```
+
+---
+
+## WireMock Setup Issues
+
+### Issue: "WireMock server not starting" or "Port conflicts"
+
+**Symptoms:**
+- `WireMockServer.Start()` fails
+- Port already in use errors
+- Tests fail to connect to WireMock
+
+**Solutions:**
+
+1. **Use Random Ports**
+   ```csharp
+   [TestInitialize]
+   public void Setup()
+   {
+       // Always use Port = 0 for random port
+       _wireMockServer = WireMockServer.Start(new WireMockServerSettings
+       {
+           Port = 0, // Random port
+           StartAdminInterface = false
+       });
+   }
+   ```
+
+2. **Proper Cleanup**
+   ```csharp
+   [TestCleanup]
+   public void Cleanup()
+   {
+       _wireMockServer?.Dispose();
+   }
+   ```
+
+3. **Check Server Status**
+   ```csharp
+   [TestInitialize]
+   public void Setup()
+   {
+       _wireMockServer = WireMockServer.Start();
+       
+       // Verify server is running
+       Assert.IsTrue(_wireMockServer.IsStarted);
+       Assert.IsTrue(_wireMockServer.Ports.Length > 0);
+   }
+   ```
+
+### Issue: "WireMock responses not matching requests"
+
+**Symptoms:**
+- Requests not matching WireMock expectations
+- 404 responses from WireMock
+- Wrong response data
+
+**Solutions:**
+
+1. **Check Request Matching**
+   ```csharp
+   // Be specific about request matching
+   _wireMockServer
+       .Given(WireMock.RequestBuilders.Request.Create()
+           .WithPath("/api/users")
+           .UsingGet()
+           .WithHeader("Authorization", "Bearer valid-token"))
+       .RespondWith(WireMock.ResponseBuilders.Response.Create()
+           .WithStatusCode(200)
+           .WithBody("[{\"id\":1,\"name\":\"John\"}]"));
+   ```
+
+2. **Debug Request Details**
+   ```csharp
+   [TestCleanup]
+   public void DebugRequests()
+   {
+       var requests = _wireMockServer.LogEntries;
+       foreach (var request in requests)
+       {
+           Console.WriteLine($"Method: {request.RequestMessage.Method}");
+           Console.WriteLine($"Path: {request.RequestMessage.Path}");
+           Console.WriteLine($"Headers: {string.Join(", ", request.RequestMessage.Headers)}");
+           Console.WriteLine($"Body: {request.RequestMessage.Body}");
+       }
+   }
+   ```
+
+3. **Use Flexible Matching**
+   ```csharp
+   // More flexible matching
+   _wireMockServer
+       .Given(WireMock.RequestBuilders.Request.Create()
+           .WithPath("/api/users")
+           .UsingGet())
+       .RespondWith(WireMock.ResponseBuilders.Response.Create()
+           .WithStatusCode(200)
+           .WithBody("[{\"id\":1,\"name\":\"John\"}]"));
    ```
 
 ---

@@ -39,6 +39,28 @@ public interface IApi
 }
 ```
 
+#### `NaturalApiConfiguration`
+
+A fluent configuration class that provides factory methods for common NaturalApi setup scenarios.
+
+```csharp
+public class NaturalApiConfiguration
+{
+    public string? BaseUrl { get; set; }
+    public string? HttpClientName { get; set; }
+    public IApiAuthProvider? AuthProvider { get; set; }
+
+    // Factory methods for common scenarios
+    public static NaturalApiConfiguration WithBaseUrl(string baseUrl);
+    public static NaturalApiConfiguration WithAuth(IApiAuthProvider authProvider);
+    public static NaturalApiConfiguration WithBaseUrlAndAuth(string baseUrl, IApiAuthProvider authProvider);
+    public static NaturalApiConfiguration WithHttpClient(string httpClientName);
+    public static NaturalApiConfiguration WithHttpClientAndAuth(string httpClientName, IApiAuthProvider authProvider);
+}
+```
+
+This configuration class is designed to work seamlessly with dependency injection and provides a clean, readable way to configure NaturalApi instances.
+
 #### `IApiContext`
 
 The builder state before execution. Holds all the configuration details and composes new contexts fluently.
@@ -54,12 +76,38 @@ public interface IApiContext
     IApiContext WithPathParams(object parameters);
     IApiContext UsingAuth(string schemeOrToken);
     IApiContext UsingToken(string token);
+    IApiContext AsUser(string username, string password);  // New method for username/password auth
     IApiContext WithTimeout(TimeSpan timeout);
     IApiResultContext Get();
     IApiResultContext Delete();
     IApiResultContext Post(object? body = null);
     IApiResultContext Put(object? body = null);
     IApiResultContext Patch(object? body = null);
+}
+```
+
+#### `ServiceCollectionExtensions`
+
+Comprehensive dependency injection support with 8 different registration patterns.
+
+```csharp
+public static class ServiceCollectionExtensions
+{
+    // Basic registration
+    public static IServiceCollection AddNaturalApi(this IServiceCollection services);
+    public static IServiceCollection AddNaturalApi(this IServiceCollection services, NaturalApiConfiguration config);
+    
+    // With authentication
+    public static IServiceCollection AddNaturalApi<TAuth>(this IServiceCollection services, TAuth authProvider);
+    public static IServiceCollection AddNaturalApiWithBaseUrl<TAuth>(this IServiceCollection services, string apiBaseUrl, TAuth authProvider);
+    
+    // With named HttpClient
+    public static IServiceCollection AddNaturalApi(this IServiceCollection services, string httpClientName);
+    public static IServiceCollection AddNaturalApi<TAuth>(this IServiceCollection services, string httpClientName, TAuth authProvider);
+    
+    // With factory
+    public static IServiceCollection AddNaturalApi(this IServiceCollection services, Func<IServiceProvider, IApi> apiFactory);
+    public static IServiceCollection AddNaturalApi<TAuth, TApi>(this IServiceCollection services, string httpClientName, Func<IServiceProvider, TAuth> authProviderFactory, Func<IServiceProvider, TApi> apiFactory);
 }
 ```
 
@@ -354,12 +402,14 @@ public class HttpClientExecutor : IHttpExecutor
 
 #### **Authentication Integration**
 
+The authentication system supports both traditional token-based authentication and the new username/password authentication via the `AsUser()` method.
+
 ```csharp
 public class AuthenticatedHttpClientExecutor : IAuthenticatedHttpExecutor
 {
     private readonly HttpClient _httpClient;
 
-    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, bool suppressAuth)
+    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, string? password, bool suppressAuth)
     {
         // 1. Build base request
         var request = BuildRequest(spec);
@@ -367,7 +417,8 @@ public class AuthenticatedHttpClientExecutor : IAuthenticatedHttpExecutor
         // 2. Add authentication if not suppressed
         if (!suppressAuth && authProvider != null)
         {
-            var token = await authProvider.GetAuthTokenAsync(username);
+            // Support both username-only and username/password authentication
+            var token = await authProvider.GetAuthTokenAsync(username, password);
             if (!string.IsNullOrEmpty(token))
             {
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -382,6 +433,33 @@ public class AuthenticatedHttpClientExecutor : IAuthenticatedHttpExecutor
     }
 }
 ```
+
+#### **Username/Password Authentication Flow**
+
+The new `AsUser(username, password)` method provides a simplified authentication flow:
+
+```csharp
+public class ApiContext : IApiContext
+{
+    private string? _username;
+    private string? _password;
+
+    public IApiContext AsUser(string username, string password)
+    {
+        _username = username;
+        _password = password;
+        return this;
+    }
+
+    public IApiResultContext Get()
+    {
+        var spec = new ApiRequestSpec(/* ... */);
+        return _executor.ExecuteAsync(spec, _authProvider, _username, _password, _suppressAuth);
+    }
+}
+```
+
+This design allows auth providers to handle both traditional token-based authentication and username/password authentication seamlessly.
 
 #### **Validation Internals**
 

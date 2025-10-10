@@ -1,4 +1,3 @@
-// AIModified:2025-10-09T07:22:36Z
 using System.Net.Http.Headers;
 
 namespace NaturalApi;
@@ -28,7 +27,7 @@ public class AuthenticatedHttpClientExecutor : IAuthenticatedHttpExecutor
     public IApiResultContext Execute(ApiRequestSpec spec)
     {
         // For backward compatibility, execute without authentication
-        return ExecuteAsync(spec, null, null, true).GetAwaiter().GetResult();
+        return ExecuteAsync(spec, null, null, null, true).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -37,9 +36,10 @@ public class AuthenticatedHttpClientExecutor : IAuthenticatedHttpExecutor
     /// <param name="spec">Request specification containing all request details</param>
     /// <param name="authProvider">Authentication provider for token resolution</param>
     /// <param name="username">Username context for per-user authentication</param>
+    /// <param name="password">Password context for authentication</param>
     /// <param name="suppressAuth">Whether to suppress authentication for this request</param>
     /// <returns>Result context with response data and validation methods</returns>
-    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, bool suppressAuth)
+    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, string? password, bool suppressAuth)
     {
         if (spec == null)
             throw new ArgumentNullException(nameof(spec));
@@ -73,7 +73,7 @@ public class AuthenticatedHttpClientExecutor : IAuthenticatedHttpExecutor
             // Handle authentication
             if (!suppressAuth && authProvider != null)
             {
-                var token = await authProvider.GetAuthTokenAsync(username);
+                var token = await authProvider.GetAuthTokenAsync(username, password);
                 if (!string.IsNullOrEmpty(token))
                 {
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);

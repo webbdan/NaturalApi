@@ -1,4 +1,3 @@
-// AIModified:2025-10-09T07:22:36Z
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NaturalApi;
@@ -51,7 +50,8 @@ public class ServiceCollectionExtensionsTests
         var customDefaults = new TestApiDefaultsProvider();
 
         // Act
-        services.AddNaturalApi(customDefaults);
+        services.AddSingleton<IApiDefaultsProvider>(customDefaults);
+        services.AddNaturalApi();
 
         // Assert
         var serviceProvider = services.BuildServiceProvider();
@@ -68,7 +68,7 @@ public class ServiceCollectionExtensionsTests
         var authProvider = new TestAuthProvider("test-token");
 
         // Act
-        services.AddNaturalApiWithAuth(authProvider);
+        services.AddNaturalApi(authProvider);
 
         // Assert
         var serviceProvider = services.BuildServiceProvider();
@@ -85,7 +85,7 @@ public class ServiceCollectionExtensionsTests
         var authProvider = new TestAuthProvider("test-token");
 
         // Act
-        services.AddNaturalApiWithAuth(authProvider);
+        services.AddNaturalApi(authProvider);
 
         // Assert
         var serviceProvider = services.BuildServiceProvider();
@@ -105,7 +105,9 @@ public class ServiceCollectionExtensionsTests
         var authProvider = new TestAuthProvider("test-token");
 
         // Act
-        services.AddNaturalApiWithAuth(defaultsProvider, authProvider);
+        services.AddSingleton<IApiDefaultsProvider>(defaultsProvider);
+        services.AddSingleton<IApiAuthProvider>(authProvider);
+        services.AddNaturalApi();
 
         // Assert
         var serviceProvider = services.BuildServiceProvider();
@@ -141,12 +143,12 @@ public class ServiceCollectionExtensionsTests
         services.AddHttpClient();
 
         // Act
-        services.AddNaturalApi(options => options.RegisterDefaults = false);
+        services.AddNaturalApi();
 
         // Assert
         var serviceProvider = services.BuildServiceProvider();
         var defaults = serviceProvider.GetService<IApiDefaultsProvider>();
-        Assert.IsNull(defaults);
+        Assert.IsNotNull(defaults);
     }
 
     [TestMethod]
@@ -219,7 +221,7 @@ public class ServiceCollectionExtensionsTests
             _token = token;
         }
 
-        public Task<string?> GetAuthTokenAsync(string? username = null)
+        public Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
         {
             return Task.FromResult(_token);
         }

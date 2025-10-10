@@ -41,11 +41,11 @@ Let's start with the simplest possible example:
 ```csharp
 using NaturalApi;
 
-// Create an API instance
-var api = new Api("https://jsonplaceholder.typicode.com");
+// Ultra-simple: No base URL needed, just use absolute URLs
+var api = new Api();
 
-// Make a GET request
-var users = await api.For("/users")
+// Make a GET request with absolute URL
+var users = await api.For("https://jsonplaceholder.typicode.com/users")
     .Get()
     .ShouldReturn<List<User>>();
 
@@ -53,6 +53,20 @@ Console.WriteLine($"Found {users.Count} users");
 ```
 
 That's it! No HttpClient setup, no JSON deserialization boilerplate, no status code checking. NaturalApi handles it all.
+
+### With Base URL (Even Simpler)
+
+If you're calling the same API repeatedly, set a base URL:
+
+```csharp
+// With base URL - now you can use relative endpoints
+var api = new Api("https://jsonplaceholder.typicode.com");
+
+// Much cleaner with relative URLs
+var users = await api.For("/users")
+    .Get()
+    .ShouldReturn<List<User>>();
+```
 
 ---
 
@@ -119,6 +133,27 @@ public class User
 
 Run this test and watch it pass. No mocking, no setup - just a real API call with automatic validation.
 
+### No Dependency Injection? No Problem!
+
+NaturalApi works perfectly without DI. Just create instances directly:
+
+```csharp
+[TestMethod]
+public async Task Ultra_Simple_Test_Without_DI()
+{
+    // No DI needed - just create the API directly
+    var api = new Api("https://jsonplaceholder.typicode.com");
+    
+    var users = await api.For("/users")
+        .Get()
+        .ShouldReturn<List<User>>();
+        
+    Assert.IsTrue(users.Count > 0);
+}
+```
+
+This is perfect for simple tests, scripts, or when you don't want to set up dependency injection.
+
 ---
 
 ## Making POST Requests
@@ -165,19 +200,37 @@ All in one fluent chain.
 
 ## Adding Authentication
 
-Many APIs require authentication. NaturalApi makes this simple:
+Many APIs require authentication. NaturalApi makes this incredibly simple with the new `AsUser()` method:
 
 ```csharp
 [TestMethod]
-public async Task Get_Protected_Resource_With_Auth()
+public async Task Get_Protected_Resource_With_Credentials()
 {
+    // Just provide username and password - NaturalApi handles the rest!
     var data = await _api.For("/protected/data")
-        .UsingAuth("Bearer your-token-here")
+        .AsUser("myusername", "mypassword")
         .Get()
         .ShouldReturn<ProtectedData>();
 
     Assert.IsNotNull(data);
 }
+```
+
+The `AsUser(username, password)` method automatically:
+1. Calls your authentication service
+2. Gets a token
+3. Adds the `Authorization: Bearer <token>` header
+4. Handles token caching
+
+### Traditional Token Authentication
+
+You can still use tokens directly:
+
+```csharp
+var data = await _api.For("/protected/data")
+    .UsingAuth("Bearer your-token-here")
+    .Get()
+    .ShouldReturn<ProtectedData>();
 ```
 
 The `UsingAuth()` method automatically adds the `Authorization` header. If you just pass a token (no "Bearer" prefix), it assumes Bearer authentication.
@@ -290,7 +343,15 @@ var result = await api.For("/endpoint")
     .ShouldReturn<ResultType>(status: 201);
 ```
 
-### Authenticated Request
+### Authenticated Request (New Way)
+```csharp
+var data = await api.For("/protected")
+    .AsUser("username", "password")
+    .Get()
+    .ShouldReturn<DataType>();
+```
+
+### Authenticated Request (Token Way)
 ```csharp
 var data = await api.For("/protected")
     .UsingAuth("Bearer token")

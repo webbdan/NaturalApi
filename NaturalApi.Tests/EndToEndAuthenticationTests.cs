@@ -1,4 +1,3 @@
-// AIModified:2025-10-09T07:22:36Z
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NaturalApi;
@@ -14,7 +13,7 @@ public class EndToEndAuthenticationTests
         // Arrange
         var services = new ServiceCollection();
         services.AddHttpClient();
-        services.AddNaturalApiWithAuth(new TestAuthProvider("integration-token"));
+        services.AddNaturalApi(new TestAuthProvider("integration-token"));
 
         var serviceProvider = services.BuildServiceProvider();
         var api = serviceProvider.GetRequiredService<IApi>();
@@ -42,7 +41,8 @@ public class EndToEndAuthenticationTests
             new TestAuthProvider("custom-token")
         );
         
-        services.AddNaturalApiWithAuth(customDefaults, new TestAuthProvider("custom-token"));
+        services.AddSingleton<IApiDefaultsProvider>(customDefaults);
+        services.AddNaturalApi(new TestAuthProvider("custom-token"));
 
         var serviceProvider = services.BuildServiceProvider();
         var api = serviceProvider.GetRequiredService<IApi>();
@@ -61,7 +61,7 @@ public class EndToEndAuthenticationTests
         // Arrange
         var services = new ServiceCollection();
         services.AddHttpClient();
-        services.AddNaturalApiWithAuth(new TestAuthProvider("should-not-be-used"));
+        services.AddNaturalApi(new TestAuthProvider("should-not-be-used"));
 
         var serviceProvider = services.BuildServiceProvider();
         var api = serviceProvider.GetRequiredService<IApi>();
@@ -81,7 +81,7 @@ public class EndToEndAuthenticationTests
         var services = new ServiceCollection();
         services.AddHttpClient();
         var authProvider = new TestAuthProvider("user-specific-token");
-        services.AddNaturalApiWithAuth(authProvider);
+        services.AddNaturalApi(authProvider);
 
         var serviceProvider = services.BuildServiceProvider();
         var api = serviceProvider.GetRequiredService<IApi>();
@@ -100,7 +100,7 @@ public class EndToEndAuthenticationTests
         // Arrange
         var services = new ServiceCollection();
         services.AddHttpClient();
-        services.AddNaturalApiWithAuth(new TestAuthProvider("chained-token"));
+        services.AddNaturalApi(new TestAuthProvider("chained-token"));
 
         var serviceProvider = services.BuildServiceProvider();
         var api = serviceProvider.GetRequiredService<IApi>();
@@ -123,7 +123,7 @@ public class EndToEndAuthenticationTests
         // Arrange
         var services = new ServiceCollection();
         services.AddHttpClient();
-        services.AddNaturalApiWithAuth(new TestAuthProvider("all-methods-token"));
+        services.AddNaturalApi(new TestAuthProvider("all-methods-token"));
 
         var serviceProvider = services.BuildServiceProvider();
         var api = serviceProvider.GetRequiredService<IApi>();
@@ -155,7 +155,7 @@ public class EndToEndAuthenticationTests
         // Arrange
         var services = new ServiceCollection();
         services.AddHttpClient();
-        services.AddNaturalApiWithAuth(new TestAuthProvider("multi-user-token"));
+        services.AddNaturalApi(new TestAuthProvider("multi-user-token"));
 
         var serviceProvider = services.BuildServiceProvider();
         var api = serviceProvider.GetRequiredService<IApi>();
@@ -190,7 +190,8 @@ public class EndToEndAuthenticationTests
             authProvider
         );
         
-        services.AddNaturalApiWithAuth(defaults, authProvider);
+        services.AddSingleton<IApiDefaultsProvider>(defaults);
+        services.AddNaturalApi(authProvider);
 
         var serviceProvider = services.BuildServiceProvider();
         var api = serviceProvider.GetRequiredService<IApi>();
@@ -256,8 +257,8 @@ public class EndToEndAuthenticationTests
         services.AddHttpClient();
         
         var customDefaults = new TestApiDefaultsProvider();
-        services.AddNaturalApi(customDefaults);
-        services.AddNaturalApi(options => options.RegisterDefaults = false);
+        services.AddSingleton<IApiDefaultsProvider>(customDefaults);
+        services.AddNaturalApi();
 
         var serviceProvider = services.BuildServiceProvider();
         var api = serviceProvider.GetRequiredService<IApi>();
@@ -308,7 +309,7 @@ public class EndToEndAuthenticationTests
             _token = token;
         }
 
-        public Task<string?> GetAuthTokenAsync(string? username = null)
+        public Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
         {
             return Task.FromResult(_token);
         }

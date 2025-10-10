@@ -1,4 +1,3 @@
-// AIModified:2025-10-09T07:22:36Z
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NaturalApi;
 

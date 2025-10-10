@@ -313,11 +313,103 @@ public async Task Get_User_Should_Return_User_From_Real_API()
 }
 ```
 
-### 3. Test Coverage
+### 3. Integration Testing with WireMock
+
+All new features must include comprehensive integration tests using WireMock:
+
+```csharp
+[TestClass]
+public class IntegrationTests
+{
+    private WireMockServers _wireMockServers = null!;
+    private IServiceProvider _serviceProvider = null!;
+    private IApi _api = null!;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _wireMockServers = new WireMockServers();
+        // Configure services with authentication
+        var services = new ServiceCollection();
+        services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+            _wireMockServers.ApiBaseUrl,
+            new SimpleCustomAuthProvider(
+                new HttpClient { BaseAddress = new Uri(_wireMockServers.AuthBaseUrl) },
+                "/auth/login")));
+        _serviceProvider = services.BuildServiceProvider();
+        _api = _serviceProvider.GetRequiredService<IApi>();
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        if (_serviceProvider is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+        _wireMockServers?.Dispose();
+    }
+
+    [TestMethod]
+    public async Task AsUser_Authentication_Should_Work()
+    {
+        // Act
+        var result = _api.For("/api/protected").AsUser("testuser", "testpass").Get();
+
+        // Assert
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+}
+```
+
+**WireMock Requirements:**
+- Use `WireMockServers` helper class for multiple servers
+- Test all 8 DI registration patterns
+- Test authentication flows with `AsUser()` method
+- Test configuration scenarios
+- Test error scenarios (401, 404, 500)
+- Test token caching behavior
+- Always use `Port = 0` for random ports
+- Properly dispose of WireMock servers in `[TestCleanup]`
+
+### 4. Test Coverage
 
 Maintain high test coverage for all public APIs.
 
-### 4. Test Categories
+### 5. New Features Testing Requirements
+
+When adding new features, ensure comprehensive testing:
+
+**NaturalApiConfiguration Testing:**
+- Test all factory methods (`WithBaseUrl`, `WithAuth`, `WithBaseUrlAndAuth`, etc.)
+- Test configuration with dependency injection
+- Test configuration with strongly-typed settings
+- Test environment-specific configuration
+
+**AsUser() Authentication Testing:**
+- Test username/password authentication flow
+- Test with different auth providers
+- Test token caching behavior
+- Test multiple users with separate token caches
+- Test authentication failures (invalid credentials)
+- Test WireMock authentication endpoints
+
+**8 DI Registration Patterns Testing:**
+- Test all 8 patterns from `AllDiPatternsTests`
+- Test pattern selection decision tree
+- Test multiple API instances
+- Test configuration-driven registration
+- Test custom API implementations
+
+**WireMock Integration Testing:**
+- Test complete authentication flows
+- Test request/response matching
+- Test error scenarios
+- Test dynamic responses
+- Test request verification
+
+### 6. Test Categories
 
 Use test categories appropriately:
 
@@ -385,7 +477,6 @@ When adding new features, update:
 All AI-modified files must include the AI modification comment:
 
 ```csharp
-// AIModified:2025-10-10T08:03:28Z
 namespace NaturalApi;
 
 public class MyClass
@@ -423,7 +514,6 @@ public class ProtectedClass
 When modifying an AI-touched file, update the existing timestamp:
 
 ```csharp
-// AIModified:2025-10-10T10:30:00Z  // Updated timestamp
 namespace NaturalApi;
 
 public class MyClass

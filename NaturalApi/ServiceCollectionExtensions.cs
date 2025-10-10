@@ -1,4 +1,3 @@
-// AIModified:2025-10-09T07:22:36Z
 using Microsoft.Extensions.DependencyInjection;
 
 namespace NaturalApi;
@@ -12,13 +11,12 @@ public static class ServiceCollectionExtensions
     /// Registers NaturalApi services with the default configuration.
     /// </summary>
     /// <param name="services">The service collection</param>
-    /// <param name="configureDefaults">Optional action to configure default settings</param>
     /// <returns>The service collection for chaining</returns>
-    public static IServiceCollection AddNaturalApi(this IServiceCollection services, Action<NaturalApiOptions>? configureDefaults = null)
+    public static IServiceCollection AddNaturalApi(this IServiceCollection services)
     {
-        var options = new NaturalApiOptions();
-        configureDefaults?.Invoke(options);
-
+        // Register default HttpClient
+        services.AddHttpClient();
+        
         // Register the API instance
         services.AddScoped<IApi>(provider =>
         {
@@ -37,7 +35,7 @@ public static class ServiceCollectionExtensions
         });
 
         // Register default implementations if not already registered
-        if (options.RegisterDefaults && !services.Any(s => s.ServiceType == typeof(IApiDefaultsProvider)))
+        if (!services.Any(s => s.ServiceType == typeof(IApiDefaultsProvider)))
         {
             services.AddSingleton<IApiDefaultsProvider, DefaultApiDefaults>();
         }
@@ -46,46 +44,215 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers NaturalApi services with a custom defaults provider.
-    /// </summary>
-    /// <param name="services">The service collection</param>
-    /// <param name="defaultsProvider">The defaults provider implementation</param>
-    /// <returns>The service collection for chaining</returns>
-    public static IServiceCollection AddNaturalApi<TDefaults>(this IServiceCollection services, TDefaults defaultsProvider)
-        where TDefaults : class, IApiDefaultsProvider
-    {
-        services.AddSingleton<IApiDefaultsProvider>(defaultsProvider);
-        return services.AddNaturalApi(options => options.RegisterDefaults = false);
-    }
-
-    /// <summary>
     /// Registers NaturalApi services with a custom auth provider.
     /// </summary>
     /// <param name="services">The service collection</param>
     /// <param name="authProvider">The auth provider implementation</param>
-    /// <param name="configureDefaults">Optional action to configure default settings</param>
     /// <returns>The service collection for chaining</returns>
-    public static IServiceCollection AddNaturalApiWithAuth<TAuth>(this IServiceCollection services, TAuth authProvider, Action<NaturalApiOptions>? configureDefaults = null)
+    public static IServiceCollection AddNaturalApi<TAuth>(this IServiceCollection services, TAuth authProvider)
         where TAuth : class, IApiAuthProvider
     {
+        // Register default HttpClient
+        services.AddHttpClient();
+        
         services.AddSingleton<IApiAuthProvider>(authProvider);
-        return services.AddNaturalApi(configureDefaults);
+        services.AddSingleton<IApiDefaultsProvider>(provider => 
+        {
+            var auth = provider.GetRequiredService<IApiAuthProvider>();
+            return new DefaultApiDefaults(authProvider: auth);
+        });
+        
+        // Register the API instance with automatic authentication
+        services.AddScoped<IApi>(provider =>
+        {
+            var httpClient = provider.GetRequiredService<HttpClient>();
+            var defaults = provider.GetRequiredService<IApiDefaultsProvider>();
+            return new Api(defaults, httpClient);
+        });
+        
+        return services;
     }
 
     /// <summary>
-    /// Registers NaturalApi services with both custom defaults and auth providers.
+    /// Registers NaturalApi services with a custom HttpClient.
     /// </summary>
     /// <param name="services">The service collection</param>
-    /// <param name="defaultsProvider">The defaults provider implementation</param>
+    /// <param name="httpClient">The HttpClient to use</param>
+    /// <returns>The service collection for chaining</returns>
+    public static IServiceCollection AddNaturalApi(this IServiceCollection services, HttpClient httpClient)
+    {
+        services.AddScoped<IApi>(provider =>
+        {
+            var executor = new HttpClientExecutor(httpClient);
+            var defaults = provider.GetService<IApiDefaultsProvider>();
+            return defaults != null ? new Api(executor, defaults) : new Api(executor);
+        });
+        return services;
+    }
+
+    /// <summary>
+    /// Registers NaturalApi services with both a custom HttpClient and auth provider.
+    /// </summary>
+    /// <param name="services">The service collection</param>
+    /// <param name="httpClient">The HttpClient to use</param>
     /// <param name="authProvider">The auth provider implementation</param>
     /// <returns>The service collection for chaining</returns>
-    public static IServiceCollection AddNaturalApiWithAuth<TDefaults, TAuth>(this IServiceCollection services, TDefaults defaultsProvider, TAuth authProvider)
-        where TDefaults : class, IApiDefaultsProvider
+    public static IServiceCollection AddNaturalApi<TAuth>(this IServiceCollection services, HttpClient httpClient, TAuth authProvider)
         where TAuth : class, IApiAuthProvider
     {
-        services.AddSingleton<IApiDefaultsProvider>(defaultsProvider);
         services.AddSingleton<IApiAuthProvider>(authProvider);
-        return services.AddNaturalApi(options => options.RegisterDefaults = false);
+        services.AddSingleton<IApiDefaultsProvider>(provider => 
+        {
+            var auth = provider.GetRequiredService<IApiAuthProvider>();
+            return new DefaultApiDefaults(authProvider: auth);
+        });
+        return services.AddNaturalApi(httpClient);
+    }
+
+    /// <summary>
+    /// Registers NaturalApi services with a named HttpClient.
+    /// </summary>
+    /// <param name="services">The service collection</param>
+    /// <param name="httpClientName">The name of the HttpClient to use</param>
+    /// <returns>The service collection for chaining</returns>
+    public static IServiceCollection AddNaturalApi(this IServiceCollection services, string httpClientName)
+    {
+        services.AddScoped<IApi>(provider =>
+        {
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpClientFactory.CreateClient(httpClientName);
+            var executor = new HttpClientExecutor(httpClient);
+            var defaults = provider.GetService<IApiDefaultsProvider>();
+            return defaults != null ? new Api(executor, defaults) : new Api(executor);
+        });
+        return services;
+    }
+
+    /// <summary>
+    /// Registers NaturalApi services with configuration.
+    /// </summary>
+    /// <param name="services">The service collection</param>
+    /// <param name="config">The NaturalApi configuration</param>
+    /// <returns>The service collection for chaining</returns>
+    public static IServiceCollection AddNaturalApi(this IServiceCollection services, NaturalApiConfiguration config)
+    {
+        // Register HttpClient if base URL is provided
+        if (!string.IsNullOrEmpty(config.BaseUrl))
+        {
+            services.AddHttpClient("NaturalApiClient", client =>
+            {
+                client.BaseAddress = new Uri(config.BaseUrl);
+            });
+        }
+        else if (!string.IsNullOrEmpty(config.HttpClientName))
+        {
+            // HttpClient is already registered by the user
+        }
+        else
+        {
+            // Register default HttpClient
+            services.AddHttpClient();
+        }
+
+        // Register auth provider if provided
+        if (config.AuthProvider != null)
+        {
+            services.AddSingleton<IApiAuthProvider>(config.AuthProvider);
+            services.AddSingleton<IApiDefaultsProvider>(provider => 
+            {
+                var auth = provider.GetRequiredService<IApiAuthProvider>();
+                return new DefaultApiDefaults(authProvider: auth);
+            });
+        }
+        else
+        {
+            // Register default defaults provider
+            services.AddSingleton<IApiDefaultsProvider, DefaultApiDefaults>();
+        }
+
+        // Register the API instance
+        services.AddScoped<IApi>(provider =>
+        {
+            HttpClient httpClient;
+            
+            if (!string.IsNullOrEmpty(config.BaseUrl))
+            {
+                var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+                httpClient = httpClientFactory.CreateClient("NaturalApiClient");
+            }
+            else if (!string.IsNullOrEmpty(config.HttpClientName))
+            {
+                var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+                httpClient = httpClientFactory.CreateClient(config.HttpClientName);
+            }
+            else
+            {
+                httpClient = provider.GetRequiredService<HttpClient>();
+            }
+
+            var defaults = provider.GetService<IApiDefaultsProvider>();
+            return new Api(defaults, httpClient);
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers NaturalApi services with both a named HttpClient and auth provider.
+    /// </summary>
+    /// <param name="services">The service collection</param>
+    /// <param name="httpClientName">The name of the HttpClient to use</param>
+    /// <param name="authProvider">The auth provider implementation</param>
+    /// <returns>The service collection for chaining</returns>
+    public static IServiceCollection AddNaturalApi<TAuth>(this IServiceCollection services, string httpClientName, TAuth authProvider)
+        where TAuth : class, IApiAuthProvider
+    {
+        services.AddSingleton<IApiAuthProvider>(authProvider);
+        services.AddSingleton<IApiDefaultsProvider>(provider => 
+        {
+            var auth = provider.GetRequiredService<IApiAuthProvider>();
+            return new DefaultApiDefaults(authProvider: auth);
+        });
+        
+        // Register the API instance with automatic authentication
+        services.AddScoped<IApi>(provider =>
+        {
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpClientFactory.CreateClient(httpClientName);
+            var defaults = provider.GetRequiredService<IApiDefaultsProvider>();
+            return new Api(defaults, httpClient);
+        });
+        
+        return services;
+    }
+
+    /// <summary>
+    /// Registers NaturalApi services with both a named HttpClient and auth provider factory.
+    /// </summary>
+    /// <param name="services">The service collection</param>
+    /// <param name="httpClientName">The name of the HttpClient to use</param>
+    /// <param name="authProviderFactory">Factory function for creating the auth provider</param>
+    /// <returns>The service collection for chaining</returns>
+    public static IServiceCollection AddNaturalApi<TAuth>(this IServiceCollection services, string httpClientName, Func<IServiceProvider, TAuth> authProviderFactory)
+        where TAuth : class, IApiAuthProvider
+    {
+        services.AddSingleton<IApiAuthProvider>(authProviderFactory);
+        services.AddSingleton<IApiDefaultsProvider>(provider => 
+        {
+            var auth = provider.GetRequiredService<IApiAuthProvider>();
+            return new DefaultApiDefaults(authProvider: auth);
+        });
+        
+        // Register the API instance with automatic authentication
+        services.AddScoped<IApi>(provider =>
+        {
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpClientFactory.CreateClient(httpClientName);
+            var defaults = provider.GetRequiredService<IApiDefaultsProvider>();
+            return new Api(defaults, httpClient);
+        });
+        
+        return services;
     }
 
     /// <summary>
@@ -96,6 +263,74 @@ public static class ServiceCollectionExtensions
     /// <returns>The service collection for chaining</returns>
     public static IServiceCollection AddNaturalApi(this IServiceCollection services, Func<IServiceProvider, IApi> apiFactory)
     {
+        services.AddScoped<IApi>(apiFactory);
+        return services;
+    }
+
+    /// <summary>
+    /// Registers NaturalApi services with a base URL and auth provider.
+    /// The auth provider is responsible for its own URL configuration.
+    /// </summary>
+    /// <param name="services">The service collection</param>
+    /// <param name="apiBaseUrl">Base URL for the API</param>
+    /// <param name="authProvider">The auth provider implementation</param>
+    /// <returns>The service collection for chaining</returns>
+    public static IServiceCollection AddNaturalApiWithBaseUrl<TAuth>(
+        this IServiceCollection services, 
+        string apiBaseUrl, 
+        TAuth authProvider)
+        where TAuth : class, IApiAuthProvider
+    {
+        // Register HttpClient for API
+        services.AddHttpClient("NaturalApiClient", client =>
+        {
+            client.BaseAddress = new Uri(apiBaseUrl);
+        });
+
+        // Register auth provider
+        services.AddSingleton<IApiAuthProvider>(authProvider);
+        
+        // Register defaults with auth
+        services.AddSingleton<IApiDefaultsProvider>(provider => 
+        {
+            var auth = provider.GetRequiredService<IApiAuthProvider>();
+            return new DefaultApiDefaults(authProvider: auth);
+        });
+        
+        // Register the API instance with automatic authentication
+        services.AddScoped<IApi>(provider =>
+        {
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpClientFactory.CreateClient("NaturalApiClient");
+            var defaults = provider.GetRequiredService<IApiDefaultsProvider>();
+            return new Api(defaults, httpClient);
+        });
+        
+        return services;
+    }
+
+    /// <summary>
+    /// Registers NaturalApi services with a custom API factory and auth provider.
+    /// </summary>
+    /// <param name="services">The service collection</param>
+    /// <param name="httpClientName">The name of the HttpClient to use</param>
+    /// <param name="authProviderFactory">Factory function for creating the auth provider</param>
+    /// <param name="apiFactory">Factory function for creating the API instance</param>
+    /// <returns>The service collection for chaining</returns>
+    public static IServiceCollection AddNaturalApi<TAuth, TApi>(
+        this IServiceCollection services, 
+        string httpClientName, 
+        Func<IServiceProvider, TAuth> authProviderFactory,
+        Func<IServiceProvider, TApi> apiFactory)
+        where TAuth : class, IApiAuthProvider
+        where TApi : class, IApi
+    {
+        services.AddSingleton<IApiAuthProvider>(authProviderFactory);
+        services.AddSingleton<IApiDefaultsProvider>(provider => 
+        {
+            var auth = provider.GetRequiredService<IApiAuthProvider>();
+            return new DefaultApiDefaults(authProvider: auth);
+        });
         services.AddScoped<IApi>(apiFactory);
         return services;
     }

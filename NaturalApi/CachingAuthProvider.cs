@@ -1,4 +1,3 @@
-// AIModified:2025-10-09T07:22:36Z
 namespace NaturalApi;
 
 /// <summary>
@@ -14,8 +13,9 @@ public class CachingAuthProvider : IApiAuthProvider
     /// Returns a cached token if still valid, otherwise fetches a new token.
     /// </summary>
     /// <param name="username">Optional username for per-user token resolution</param>
+    /// <param name="password">Optional password for authentication</param>
     /// <returns>Cached token if valid, or newly fetched token</returns>
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         if (_token == null || DateTime.UtcNow > _expires)
         {

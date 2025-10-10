@@ -20,6 +20,15 @@ public class Api : IApi
     }
 
     /// <summary>
+    /// Initializes a new instance of the Api class with default HttpClient.
+    /// This is the simplest way to use NaturalApi - just use absolute URLs directly.
+    /// </summary>
+    public Api()
+    {
+        _httpExecutor = new HttpClientExecutor(new HttpClient());
+    }
+
+    /// <summary>
     /// Initializes a new instance of the Api class with a base URL.
     /// </summary>
     /// <param name="baseUrl">Base URL for all requests</param>
@@ -41,6 +50,25 @@ public class Api : IApi
     {
         _httpExecutor = httpExecutor ?? throw new ArgumentNullException(nameof(httpExecutor));
         _defaults = defaults ?? throw new ArgumentNullException(nameof(defaults));
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the Api class with defaults provider and HttpClient.
+    /// This constructor automatically handles authentication when an auth provider is present.
+    /// </summary>
+    /// <param name="defaults">Default configuration provider</param>
+    /// <param name="httpClient">HttpClient for making requests</param>
+    public Api(IApiDefaultsProvider defaults, HttpClient httpClient)
+    {
+        if (httpClient == null) throw new ArgumentNullException(nameof(httpClient));
+        if (defaults == null) throw new ArgumentNullException(nameof(defaults));
+        
+        _defaults = defaults;
+        
+        // Automatically choose the right executor based on authentication
+        _httpExecutor = defaults.AuthProvider != null 
+            ? new AuthenticatedHttpClientExecutor(httpClient)
+            : new HttpClientExecutor(httpClient);
     }
 
     /// <summary>
@@ -86,11 +114,7 @@ public class Api : IApi
             null,
             _defaults?.Timeout);
 
-        // Use authenticated executor if available and not using a mock, otherwise use regular executor
-        var executor = _defaults?.AuthProvider != null && _httpExecutor.GetType().Name != "MockHttpExecutor"
-            ? new AuthenticatedHttpClientExecutor(new HttpClient())
-            : _httpExecutor;
-        
-        return new ApiContext(spec, executor, _defaults?.AuthProvider);
+        // The executor is already configured correctly in the constructor
+        return new ApiContext(spec, _httpExecutor, _defaults?.AuthProvider);
     }
 }

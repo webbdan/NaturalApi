@@ -1,4 +1,3 @@
-// AIModified:2025-10-09T08:05:39Z
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Net.Http;
 
@@ -17,6 +16,9 @@ public class CookieTests
             new Dictionary<string, string>(),
             new Dictionary<string, object>(),
             new Dictionary<string, object>(),
+            null,
+            null,
+            false,
             null,
             null);
 
@@ -39,6 +41,9 @@ public class CookieTests
             new Dictionary<string, string>(),
             new Dictionary<string, object>(),
             new Dictionary<string, object>(),
+            null,
+            null,
+            false,
             null,
             null);
 
@@ -71,6 +76,7 @@ public class CookieTests
             null,
             null,
             false,
+            null,
             null,
             new Dictionary<string, string> { { "session", "abc123" } });
 
@@ -120,6 +126,7 @@ public class CookieTests
             null,
             null,
             false,
+            null,
             null,
             new Dictionary<string, string> { { "session", "abc123" } });
         var context = new ApiContext(spec, mockExecutor);

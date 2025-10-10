@@ -155,6 +155,21 @@ public sealed class ApiContext : IApiContext
     }
 
     /// <summary>
+    /// Sets the username and password context for authentication.
+    /// Both credentials will be passed to the auth provider for token resolution.
+    /// </summary>
+    public IApiContext AsUser(string username, string password)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+            throw new ArgumentException("Username cannot be null or empty", nameof(username));
+        if (string.IsNullOrWhiteSpace(password))
+            throw new ArgumentException("Password cannot be null or empty", nameof(password));
+
+        var newSpec = _spec.AsUser(username, password);
+        return new ApiContext(newSpec, _executor, _authProvider);
+    }
+
+    /// <summary>
     /// Sets a timeout for the request.
     /// </summary>
     public IApiContext WithTimeout(TimeSpan timeout)
@@ -254,7 +269,7 @@ public sealed class ApiContext : IApiContext
         if (_executor is IAuthenticatedHttpExecutor authExecutor && _authProvider != null)
         {
             // Use authenticated executor
-            return authExecutor.ExecuteAsync(spec, _authProvider, _spec.Username, _spec.SuppressAuth).GetAwaiter().GetResult();
+            return authExecutor.ExecuteAsync(spec, _authProvider, _spec.Username, _spec.Password, _spec.SuppressAuth).GetAwaiter().GetResult();
         }
         else
         {

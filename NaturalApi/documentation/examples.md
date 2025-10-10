@@ -6,6 +6,13 @@
 
 ## Table of Contents
 
+- [8 Ways to Register NaturalApi](#8-ways-to-register-naturalapi)
+- [Complete Integration Testing Setup](#complete-integration-testing-setup)
+- [Username/Password Authentication](#usernamepassword-authentication)
+- [Multiple Users with Token Caching](#multiple-users-with-token-caching)
+- [Configuration-Based Setup](#configuration-based-setup)
+- [Testing Without Dependency Injection](#testing-without-dependency-injection)
+- [Custom Authentication Service](#custom-authentication-service)
 - [Complete CRUD Operations](#complete-crud-operations)
 - [Authentication Flow](#authentication-flow)
 - [Multi-Step Workflows](#multi-step-workflows)
@@ -13,6 +20,888 @@
 - [Testing Patterns](#testing-patterns)
 - [Advanced Configuration](#advanced-configuration)
 - [Integration Examples](#integration-examples)
+
+---
+
+## 8 Ways to Register NaturalApi
+
+This comprehensive example shows all 8 dependency injection patterns available in NaturalApi, from ultra-simple to highly customized.
+
+```csharp
+[TestClass]
+public class AllDiPatternsExamples
+{
+    private WireMockServers _wireMockServers = null!;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _wireMockServers = new WireMockServers();
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        _wireMockServers?.Dispose();
+    }
+
+    [TestMethod]
+    public async Task Pattern1_UltraSimple_ShouldWork()
+    {
+        // Pattern 1: Ultra Simple - No configuration, must use absolute URLs
+        var services = new ServiceCollection();
+        services.AddNaturalApi();
+
+        var serviceProvider = services.BuildServiceProvider();
+        var api = serviceProvider.GetRequiredService<IApi>();
+
+        // Must use absolute URLs
+        var result = api.For($"{_wireMockServers.ApiBaseUrl}/api/protected").Get();
+
+        Assert.AreEqual(401, result.StatusCode); // No auth, should be unauthorized
+    }
+
+    [TestMethod]
+    public async Task Pattern2_WithBaseUrl_ShouldWork()
+    {
+        // Pattern 2: With Base URL - Can use relative URLs
+        var services = new ServiceCollection();
+        services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrl(_wireMockServers.ApiBaseUrl));
+
+        var serviceProvider = services.BuildServiceProvider();
+        var api = serviceProvider.GetRequiredService<IApi>();
+
+        // Can use relative URLs
+        var result = api.For("/api/protected").Get();
+
+        Assert.AreEqual(401, result.StatusCode); // No auth, should be unauthorized
+    }
+
+    [TestMethod]
+    public async Task Pattern3_WithAuthProvider_ShouldWork()
+    {
+        // Pattern 3: With Auth Provider - Auth provider knows its own URLs
+        var services = new ServiceCollection();
+        services.AddNaturalApi(NaturalApiConfiguration.WithAuth(new SimpleCustomAuthProvider(
+            new HttpClient { BaseAddress = new Uri(_wireMockServers.AuthBaseUrl) },
+            "/auth/login")));
+
+        var serviceProvider = services.BuildServiceProvider();
+        var api = serviceProvider.GetRequiredService<IApi>();
+
+        // Must use absolute URLs but with auth
+        var result = api.For($"{_wireMockServers.ApiBaseUrl}/api/protected").AsUser("testuser", "testpass").Get();
+
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+
+    [TestMethod]
+    public async Task Pattern4_WithBaseUrlAndAuth_ShouldWork()
+    {
+        // Pattern 4: With Both - Best of both worlds (RECOMMENDED)
+        var services = new ServiceCollection();
+        services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+            _wireMockServers.ApiBaseUrl,
+            new SimpleCustomAuthProvider(
+                new HttpClient { BaseAddress = new Uri(_wireMockServers.AuthBaseUrl) },
+                "/auth/login")));
+
+        var serviceProvider = services.BuildServiceProvider();
+        var api = serviceProvider.GetRequiredService<IApi>();
+
+        // Can use relative URLs with auth
+        var result = api.For("/api/protected").AsUser("testuser", "testpass").Get();
+
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+
+    [TestMethod]
+    public async Task Pattern5_WithNamedHttpClient_ShouldWork()
+    {
+        // Pattern 5: With Named HttpClient
+        var services = new ServiceCollection();
+        
+        // Configure named HttpClient
+        services.AddHttpClient("MyApiClient", client =>
+        {
+            client.BaseAddress = new Uri(_wireMockServers.ApiBaseUrl);
+        });
+
+        services.AddHttpClient("MyAuthClient", client =>
+        {
+            client.BaseAddress = new Uri(_wireMockServers.AuthBaseUrl);
+        });
+
+        // Use named HttpClient with auth
+        services.AddNaturalApi(NaturalApiConfiguration.WithHttpClientAndAuth("MyApiClient", new SimpleCustomAuthProvider(
+            new HttpClient { BaseAddress = new Uri(_wireMockServers.AuthBaseUrl) },
+            "/auth/login")));
+
+        var serviceProvider = services.BuildServiceProvider();
+        var api = serviceProvider.GetRequiredService<IApi>();
+
+        // Can use relative URLs with auth
+        var result = api.For("/api/protected").AsUser("testuser", "testpass").Get();
+
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+
+    [TestMethod]
+    public async Task Pattern6_WithConfiguration_ShouldWork()
+    {
+        // Pattern 6: With Configuration
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ApiSettings:BaseUrl"] = _wireMockServers.ApiBaseUrl,
+                ["ApiSettings:AuthBaseUrl"] = _wireMockServers.AuthBaseUrl
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(configuration);
+        
+        // Use configuration values
+        var apiBaseUrl = configuration["ApiSettings:BaseUrl"];
+        services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+            apiBaseUrl!,
+            new SimpleCustomAuthProvider(
+                new HttpClient { BaseAddress = new Uri(_wireMockServers.AuthBaseUrl) },
+                "/auth/login")));
+
+        var serviceProvider = services.BuildServiceProvider();
+        var api = serviceProvider.GetRequiredService<IApi>();
+
+        // Can use relative URLs with auth
+        var result = api.For("/api/protected").AsUser("testuser", "testpass").Get();
+
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+
+    [TestMethod]
+    public async Task Pattern7_WithFactory_ShouldWork()
+    {
+        // Pattern 7: With Factory - Maximum flexibility
+        var services = new ServiceCollection();
+        
+        services.AddHttpClient("ApiClient", client =>
+        {
+            client.BaseAddress = new Uri(_wireMockServers.ApiBaseUrl);
+        });
+
+        services.AddHttpClient("AuthClient", client =>
+        {
+            client.BaseAddress = new Uri(_wireMockServers.AuthBaseUrl);
+        });
+
+        // Use factory for maximum control
+        services.AddNaturalApi(provider =>
+        {
+            var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpClientFactory.CreateClient("ApiClient");
+            var authHttpClient = httpClientFactory.CreateClient("AuthClient");
+            var authProvider = new SimpleCustomAuthProvider(authHttpClient, "/auth/login");
+            var defaults = new DefaultApiDefaults(authProvider: authProvider);
+            return new Api(defaults, httpClient);
+        });
+
+        var serviceProvider = services.BuildServiceProvider();
+        var api = serviceProvider.GetRequiredService<IApi>();
+
+        // Can use relative URLs with auth
+        var result = api.For("/api/protected").AsUser("testuser", "testpass").Get();
+
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+
+    [TestMethod]
+    public async Task Pattern8_WithCustomApi_ShouldWork()
+    {
+        // Pattern 8: With Custom API - Advanced scenarios
+        var services = new ServiceCollection();
+        
+        services.AddHttpClient("ApiClient", client =>
+        {
+            client.BaseAddress = new Uri(_wireMockServers.ApiBaseUrl);
+        });
+
+        services.AddHttpClient("AuthClient", client =>
+        {
+            client.BaseAddress = new Uri(_wireMockServers.AuthBaseUrl);
+        });
+
+        // Register auth provider
+        services.AddSingleton<IApiAuthProvider>(new SimpleCustomAuthProvider(
+            new HttpClient { BaseAddress = new Uri(_wireMockServers.AuthBaseUrl) },
+            "/auth/login"));
+
+        // Register defaults
+        services.AddSingleton<IApiDefaultsProvider>(provider =>
+        {
+            var auth = provider.GetRequiredService<IApiAuthProvider>();
+            return new DefaultApiDefaults(authProvider: auth);
+        });
+
+        // Use custom API factory
+        services.AddNaturalApi<SimpleCustomAuthProvider, CustomApi>(
+            "ApiClient",
+            provider => new SimpleCustomAuthProvider(
+                provider.GetRequiredService<IHttpClientFactory>().CreateClient("AuthClient"),
+                "/auth/login"),
+            provider =>
+            {
+                var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+                var httpClient = httpClientFactory.CreateClient("ApiClient");
+                var executor = new HttpClientExecutor(httpClient);
+                var defaults = provider.GetRequiredService<IApiDefaultsProvider>();
+                return new CustomApi(executor, defaults, httpClient);
+            });
+
+        var serviceProvider = services.BuildServiceProvider();
+        var api = serviceProvider.GetRequiredService<IApi>();
+
+        // Can use relative URLs with auth
+        var result = api.For("/api/protected").AsUser("testuser", "testpass").Get();
+
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+}
+```
+
+### Which Pattern Should I Use?
+
+- **Pattern 1**: Quick prototyping, simple scripts
+- **Pattern 2**: Single API, no authentication needed
+- **Pattern 3**: Authentication needed, but want to use absolute URLs
+- **Pattern 4**: Most applications (RECOMMENDED)
+- **Pattern 5**: Need custom HttpClient configuration
+- **Pattern 6**: Multiple environments, configuration-driven
+- **Pattern 7**: Maximum control over API creation
+- **Pattern 8**: Custom API implementation needed
+
+---
+
+## Complete Integration Testing Setup
+
+This example shows how to set up comprehensive integration testing with WireMock, including authentication flows and multiple API endpoints.
+
+```csharp
+[TestClass]
+public class CompleteIntegrationTestingExample
+{
+    private WireMockServers _wireMockServers = null!;
+    private IServiceProvider _serviceProvider = null!;
+    private IApi _api = null!;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _wireMockServers = new WireMockServers();
+        
+        // Configure services with authentication
+        var services = new ServiceCollection();
+        
+        services.AddHttpClient("AuthClient", client =>
+        {
+            client.BaseAddress = new Uri(_wireMockServers.AuthBaseUrl);
+        });
+        
+        services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+            _wireMockServers.ApiBaseUrl,
+            new SimpleCustomAuthProvider(
+                new HttpClient { BaseAddress = new Uri(_wireMockServers.AuthBaseUrl) },
+                "/auth/login")));
+
+        _serviceProvider = services.BuildServiceProvider();
+        _api = _serviceProvider.GetRequiredService<IApi>();
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        if (_serviceProvider is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+        _wireMockServers?.Dispose();
+    }
+
+    [TestMethod]
+    public async Task Complete_Authentication_Flow_Should_Work()
+    {
+        // Act - Use the new AsUser() method
+        var result = _api.For("/api/protected").AsUser("testuser", "testpass").Get();
+
+        // Assert
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+
+    [TestMethod]
+    public async Task Different_Users_Should_Work()
+    {
+        // User 1
+        var result1 = _api.For("/api/protected").AsUser("testuser", "testpass").Get();
+        Assert.AreEqual(200, result1.StatusCode);
+
+        // User 2 (different credentials)
+        var result2 = _api.For("/api/protected").AsUser("user2", "pass2").Get();
+        Assert.AreEqual(200, result2.StatusCode);
+        Assert.IsTrue(result2.RawBody.Contains("Access granted for user2"));
+    }
+
+    [TestMethod]
+    public async Task Invalid_Credentials_Should_Fail()
+    {
+        // Act - Invalid credentials
+        var result = _api.For("/api/protected").AsUser("invaliduser", "wrongpass").Get();
+
+        // Assert
+        Assert.AreEqual(401, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Unauthorized"));
+    }
+}
+```
+
+---
+
+## Username/Password Authentication
+
+This example demonstrates the complete username/password authentication flow with NaturalApi.
+
+```csharp
+[TestClass]
+public class UsernamePasswordAuthenticationExample
+{
+    private WireMockServers _wireMockServers = null!;
+    private IServiceProvider _serviceProvider = null!;
+    private IApi _api = null!;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _wireMockServers = new WireMockServers();
+        
+        var services = new ServiceCollection();
+        
+        // Configure auth service
+        services.AddHttpClient("AuthClient", client =>
+        {
+            client.BaseAddress = new Uri(_wireMockServers.AuthBaseUrl);
+        });
+        
+        // Register NaturalApi with authentication
+        services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+            _wireMockServers.ApiBaseUrl,
+            new SimpleCustomAuthProvider(
+                new HttpClient { BaseAddress = new Uri(_wireMockServers.AuthBaseUrl) },
+                "/auth/login")));
+
+        _serviceProvider = services.BuildServiceProvider();
+        _api = _serviceProvider.GetRequiredService<IApi>();
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        if (_serviceProvider is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+        _wireMockServers?.Dispose();
+    }
+
+    [TestMethod]
+    public async Task Authenticated_Request_With_Credentials_Should_Work()
+    {
+        // Act - Just provide username and password
+        var result = _api.For("/api/protected").AsUser("testuser", "testpass").Get();
+
+        // Assert
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+
+    [TestMethod]
+    public async Task Without_Credentials_Should_Fail()
+    {
+        // Act - No credentials provided
+        var result = _api.For("/api/protected").Get();
+
+        // Assert
+        Assert.AreEqual(401, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Unauthorized"));
+    }
+
+    [TestMethod]
+    public async Task Username_Only_Should_Fail()
+    {
+        // Act - Only username, no password
+        var result = _api.For("/api/protected").AsUser("testuser").Get();
+
+        // Assert
+        Assert.AreEqual(401, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Unauthorized"));
+    }
+}
+```
+
+---
+
+## Multiple Users with Token Caching
+
+This example shows how to handle multiple users with token caching using the advanced authentication service pattern.
+
+```csharp
+[TestClass]
+public class MultipleUsersWithTokenCachingExample
+{
+    private WireMockServers _wireMockServers = null!;
+    private IServiceProvider _serviceProvider = null!;
+    private IApi _api = null!;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _wireMockServers = new WireMockServers();
+        
+        var services = new ServiceCollection();
+
+        // Configure HttpClient for auth service
+        services.AddHttpClient<IUsernamePasswordAuthService, UsernamePasswordAuthService>(client =>
+        {
+            client.BaseAddress = new Uri(_wireMockServers.AuthBaseUrl);
+        });
+
+        // Configure HttpClient for NaturalApi
+        services.AddHttpClient("ApiClient", client =>
+        {
+            client.BaseAddress = new Uri(_wireMockServers.ApiBaseUrl);
+        });
+
+        // Register NaturalApi with custom auth provider
+        services.AddNaturalApi<CustomAuthProvider, CustomApi>("ApiClient", 
+            provider =>
+            {
+                var authService = provider.GetRequiredService<IUsernamePasswordAuthService>();
+                return new CustomAuthProvider(authService, "defaultuser", "defaultpass");
+            },
+            provider =>
+            {
+                var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+                var httpClient = httpClientFactory.CreateClient("ApiClient");
+                var executor = new HttpClientExecutor(httpClient);
+                var defaults = provider.GetRequiredService<IApiDefaultsProvider>();
+                return new CustomApi(executor, defaults, httpClient);
+            });
+
+        _serviceProvider = services.BuildServiceProvider();
+        _api = _serviceProvider.GetRequiredService<IApi>();
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        if (_serviceProvider is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+        _wireMockServers?.Dispose();
+    }
+
+    [TestMethod]
+    public async Task First_Time_Authentication_Should_Succeed()
+    {
+        // Act - Make API call (should trigger authentication)
+        var result = _api.For("/api/protected").Get();
+
+        // Assert
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+
+    [TestMethod]
+    public async Task Cached_Token_Should_Be_Used_On_Subsequent_Calls()
+    {
+        // Act - Make first call (triggers authentication)
+        var result1 = _api.For("/api/protected").Get();
+        
+        // Make second call (should use cached token)
+        var result2 = _api.For("/api/protected").Get();
+
+        // Assert both calls succeed
+        Assert.AreEqual(200, result1.StatusCode);
+        Assert.AreEqual(200, result2.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task Multiple_Users_Should_Have_Separate_Token_Caches()
+    {
+        // Arrange - Create service provider for second user
+        var serviceProvider2 = ServiceConfiguration.ConfigureServices(
+            authServerUrl: _wireMockServers.AuthBaseUrl,
+            apiServerUrl: _wireMockServers.ApiBaseUrl,
+            username: "user2",
+            password: "pass2",
+            cacheExpiration: TimeSpan.FromMinutes(10));
+
+        var api2 = serviceProvider2.GetRequiredService<IApi>();
+
+        try
+        {
+            // Act - Make calls with both users
+            var result1 = _api.For("/api/protected").Get();
+            var result2 = api2.For("/api/protected").Get();
+
+            // Assert both succeed with different responses
+            Assert.AreEqual(200, result1.StatusCode);
+            Assert.AreEqual(200, result2.StatusCode);
+            
+            Assert.IsTrue(result1.RawBody.Contains("Access granted"));
+            Assert.IsTrue(result2.RawBody.Contains("Access granted for user2"));
+        }
+        finally
+        {
+            if (serviceProvider2 is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+        }
+    }
+}
+```
+
+---
+
+## Configuration-Based Setup
+
+This example shows how to use configuration files with NaturalApi for different environments.
+
+```csharp
+[TestClass]
+public class ConfigurationBasedSetupExample
+{
+    private WireMockServers _wireMockServers = null!;
+    private IServiceProvider _serviceProvider = null!;
+    private IApi _api = null!;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _wireMockServers = new WireMockServers();
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        if (_serviceProvider is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+        _wireMockServers?.Dispose();
+    }
+
+    [TestMethod]
+    public async Task Configuration_From_AppSettings_Should_Work()
+    {
+        // Arrange - Create configuration from appsettings.json
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("appsettings.json", optional: false)
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ApiSettings:BaseUrl"] = _wireMockServers.ApiBaseUrl,
+                ["ApiSettings:AuthBaseUrl"] = _wireMockServers.AuthBaseUrl,
+                ["ApiSettings:AuthEndpoint"] = "/auth/login"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(configuration);
+        
+        // Configure HttpClient for auth service
+        services.AddHttpClient("AuthClient", client =>
+        {
+            client.BaseAddress = new Uri(_wireMockServers.AuthBaseUrl);
+        });
+
+        // Use configuration to register NaturalApi
+        var apiBaseUrl = configuration["ApiSettings:BaseUrl"];
+        services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+            apiBaseUrl!,
+            new SimpleCustomAuthProvider(
+                new HttpClient { BaseAddress = new Uri(_wireMockServers.AuthBaseUrl) },
+                "/auth/login")));
+
+        _serviceProvider = services.BuildServiceProvider();
+        _api = _serviceProvider.GetRequiredService<IApi>();
+
+        // Act - Use relative endpoint with authentication
+        var result = _api.For("/api/protected").AsUser("testuser", "testpass").Get();
+
+        // Assert
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+
+    [TestMethod]
+    public async Task Strongly_Typed_Configuration_Should_Work()
+    {
+        // Arrange - Strongly-typed configuration
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["NaturalApiSettings:BaseUrl"] = _wireMockServers.ApiBaseUrl,
+                ["NaturalApiSettings:AuthBaseUrl"] = _wireMockServers.AuthBaseUrl,
+                ["NaturalApiSettings:AuthEndpoint"] = "/auth/login"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(configuration);
+        
+        // Bind strongly-typed configuration
+        var apiSettings = new NaturalApiSettings();
+        configuration.GetSection("NaturalApiSettings").Bind(apiSettings);
+        services.AddSingleton(apiSettings);
+
+        // Configure HttpClient for auth service
+        services.AddHttpClient("AuthClient", client =>
+        {
+            client.BaseAddress = new Uri(apiSettings.AuthBaseUrl);
+        });
+
+        // Use strongly-typed configuration
+        services.AddNaturalApiWithBaseUrl(
+            apiSettings.BaseUrl,
+            new SimpleCustomAuthProvider(
+                new HttpClient { BaseAddress = new Uri(apiSettings.AuthBaseUrl) },
+                apiSettings.AuthEndpoint));
+
+        _serviceProvider = services.BuildServiceProvider();
+        _api = _serviceProvider.GetRequiredService<IApi>();
+
+        // Act - Use relative endpoint with authentication
+        var result = _api.For("/api/protected").AsUser("testuser", "testpass").Get();
+
+        // Assert
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+}
+
+public class NaturalApiSettings
+{
+    public string BaseUrl { get; set; } = string.Empty;
+    public string AuthBaseUrl { get; set; } = string.Empty;
+    public string AuthEndpoint { get; set; } = "/auth/login";
+    public string HttpClientName { get; set; } = "NaturalApiClient";
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
+}
+```
+
+---
+
+## Testing Without Dependency Injection
+
+This example shows how to use NaturalApi without dependency injection, perfect for simple tests or scripts.
+
+```csharp
+[TestClass]
+public class NoDiTestingExample
+{
+    private WireMockServers _wireMockServers = null!;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _wireMockServers = new WireMockServers();
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        _wireMockServers?.Dispose();
+    }
+
+    [TestMethod]
+    public async Task Ultra_Simple_Usage_Should_Work()
+    {
+        // Arrange - Ultra simple usage - no base URL needed
+        var api = new Api();
+
+        // Act - Use absolute URL directly
+        var result = api.For($"{_wireMockServers.ApiBaseUrl}/api/protected").Get();
+
+        // Assert
+        Assert.AreEqual(401, result.StatusCode); // No auth, should be unauthorized
+    }
+
+    [TestMethod]
+    public async Task With_Base_Url_Should_Work()
+    {
+        // Arrange - Create API with base URL
+        var api = new Api(_wireMockServers.ApiBaseUrl);
+
+        // Act - Use relative endpoint
+        var result = api.For("/api/protected").Get();
+
+        // Assert
+        Assert.AreEqual(401, result.StatusCode); // No auth, should be unauthorized
+    }
+
+    [TestMethod]
+    public async Task With_Base_Url_And_Auth_Should_Work()
+    {
+        // Arrange - Create API with base URL and auth provider
+        var authHttpClient = new HttpClient { BaseAddress = new Uri(_wireMockServers.AuthBaseUrl) };
+        var authProvider = new SimpleCustomAuthProvider(authHttpClient, "/auth/login");
+        var defaults = new DefaultApiDefaults(authProvider: authProvider);
+        var api = new Api(defaults, new HttpClient { BaseAddress = new Uri(_wireMockServers.ApiBaseUrl) });
+
+        // Act - Use relative endpoint with authentication
+        var result = api.For("/api/protected").AsUser("testuser", "testpass").Get();
+
+        // Assert
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+
+    [TestMethod]
+    public async Task With_Auth_Provider_Should_Work()
+    {
+        // Arrange - Create auth provider and API with auth
+        var authHttpClient = new HttpClient { BaseAddress = new Uri(_wireMockServers.AuthBaseUrl) };
+        var authProvider = new SimpleCustomAuthProvider(authHttpClient, "/auth/login");
+        var defaults = new DefaultApiDefaults(authProvider: authProvider);
+        var httpClient = new HttpClient { BaseAddress = new Uri(_wireMockServers.ApiBaseUrl) };
+        var api = new Api(defaults, httpClient);
+
+        // Act - Use relative endpoint with authentication
+        var result = api.For("/api/protected").AsUser("testuser", "testpass").Get();
+
+        // Assert
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+}
+```
+
+---
+
+## Custom Authentication Service
+
+This example shows how to create a custom authentication service with token caching for production applications.
+
+```csharp
+[TestClass]
+public class CustomAuthenticationServiceExample
+{
+    private WireMockServers _wireMockServers = null!;
+    private IServiceProvider _serviceProvider = null!;
+    private IApi _api = null!;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _wireMockServers = new WireMockServers();
+        
+        _serviceProvider = ServiceConfiguration.ConfigureServices(
+            authServerUrl: _wireMockServers.AuthBaseUrl,
+            apiServerUrl: _wireMockServers.ApiBaseUrl,
+            username: "testuser",
+            password: "testpass",
+            cacheExpiration: TimeSpan.FromMinutes(10));
+
+        _api = _serviceProvider.GetRequiredService<IApi>();
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        if (_serviceProvider is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+        _wireMockServers?.Dispose();
+    }
+
+    [TestMethod]
+    public async Task First_Time_Authentication_Should_Succeed()
+    {
+        // Act - Make API call (should trigger authentication)
+        var result = _api.For("/api/protected").Get();
+
+        // Assert
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+    }
+
+    [TestMethod]
+    public async Task Cached_Token_Should_Be_Used_On_Subsequent_Calls()
+    {
+        // Act - Make first call (triggers authentication)
+        var result1 = _api.For("/api/protected").Get();
+        
+        // Make second call (should use cached token)
+        var result2 = _api.For("/api/protected").Get();
+
+        // Assert both calls succeed
+        Assert.AreEqual(200, result1.StatusCode);
+        Assert.AreEqual(200, result2.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task Auth_Service_Should_Cache_Tokens_Per_User()
+    {
+        // Arrange - Get auth service directly
+        var authService = _serviceProvider.GetRequiredService<IUsernamePasswordAuthService>();
+
+        // Act - Authenticate first time
+        var token1 = await authService.AuthenticateAsync("testuser", "testpass");
+        
+        // Get cached token
+        var cachedToken = await authService.GetCachedTokenAsync("testuser");
+        
+        // Authenticate again (should use cache)
+        var token2 = await authService.AuthenticateAsync("testuser", "testpass");
+
+        // Assert
+        Assert.IsNotNull(token1);
+        Assert.IsNotNull(cachedToken);
+        Assert.IsNotNull(token2);
+        Assert.AreEqual(token1, cachedToken);
+        Assert.AreEqual(token1, token2); // Should be same token from cache
+    }
+
+    [TestMethod]
+    public async Task End_To_End_Authentication_Flow_Should_Work()
+    {
+        // This test demonstrates the complete flow:
+        // 1. User makes API call
+        // 2. NaturalApi detects no auth token
+        // 3. Auth provider calls auth service
+        // 4. Auth service authenticates with WireMock
+        // 5. Token is cached
+        // 6. Token is added to request
+        // 7. API call succeeds with bearer token
+
+        // Act
+        var result = _api.For("/api/protected").Get();
+
+        // Assert
+        Assert.AreEqual(200, result.StatusCode);
+        Assert.IsTrue(result.RawBody.Contains("Access granted"));
+        Assert.IsTrue(result.RawBody.Contains("protected-resource-data"));
+    }
+}
+```
 
 ---
 

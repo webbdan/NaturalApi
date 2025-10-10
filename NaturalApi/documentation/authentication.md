@@ -6,6 +6,7 @@
 
 ## Table of Contents
 
+- [Simple Username/Password Authentication](#simple-usernamepassword-authentication)
 - [Inline Authentication](#inline-authentication)
 - [Authentication Providers](#authentication-providers)
 - [Token Caching](#token-caching)
@@ -13,6 +14,109 @@
 - [Custom Auth Providers](#custom-auth-providers)
 - [Multi-Tenant Authentication](#multi-tenant-authentication)
 - [Best Practices](#best-practices)
+
+---
+
+## Simple Username/Password Authentication
+
+The easiest way to authenticate is with the new `AsUser()` method - just provide username and password:
+
+```csharp
+// Simple username/password authentication
+var data = await api.For("/protected")
+    .AsUser("myusername", "mypassword")
+    .Get()
+    .ShouldReturn<Data>();
+```
+
+The `AsUser(username, password)` method automatically:
+1. Calls your authentication service
+2. Gets a token
+3. Adds the `Authorization: Bearer <token>` header
+4. Handles token caching
+
+### How It Works
+
+Behind the scenes, `AsUser()` uses an `IApiAuthProvider` that:
+- Accepts username and password parameters
+- Calls your authentication service to get a token
+- Returns the token for NaturalApi to use
+
+```csharp
+public class SimpleCustomAuthProvider : IApiAuthProvider
+{
+    private readonly HttpClient _httpClient;
+    private readonly string _authEndpoint;
+
+    public SimpleCustomAuthProvider(HttpClient httpClient, string authEndpoint)
+    {
+        _httpClient = httpClient;
+        _authEndpoint = authEndpoint;
+    }
+
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
+    {
+        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+        {
+            return null;
+        }
+
+        // Call your auth service
+        var loginRequest = new { username, password };
+        var json = System.Text.Json.JsonSerializer.Serialize(loginRequest);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        var response = await _httpClient.PostAsync(_authEndpoint, content);
+        
+        if (response.IsSuccessStatusCode)
+        {
+            var responseContent = await response.Content.ReadAsStringAsync();
+            var authResponse = System.Text.Json.JsonSerializer.Deserialize<AuthResponse>(responseContent);
+            return authResponse?.Token;
+        }
+        
+        return null;
+    }
+}
+```
+
+### Setting Up AsUser() Authentication
+
+To use `AsUser()`, you need to register an auth provider that accepts username/password:
+
+```csharp
+// In your DI setup
+services.AddHttpClient("AuthClient", client =>
+{
+    client.BaseAddress = new Uri("https://auth.example.com");
+});
+
+services.AddNaturalApi(NaturalApiConfiguration.WithBaseUrlAndAuth(
+    "https://api.example.com",
+    new SimpleCustomAuthProvider(
+        new HttpClient { BaseAddress = new Uri("https://auth.example.com") },
+        "/auth/login")));
+```
+
+### Multiple Users
+
+You can use different credentials for different requests:
+
+```csharp
+// User 1
+var user1Data = await api.For("/protected")
+    .AsUser("user1", "pass1")
+    .Get()
+    .ShouldReturn<Data>();
+
+// User 2  
+var user2Data = await api.For("/protected")
+    .AsUser("user2", "pass2")
+    .Get()
+    .ShouldReturn<Data>();
+```
+
+Each user gets their own token, and tokens are cached per user.
 
 ---
 
@@ -238,6 +342,161 @@ public class MultiUserAuthProvider : IApiAuthProvider
         return token;
     }
 }
+```
+
+---
+
+## Advanced Authentication Patterns
+
+### Username/Password Authentication Service
+
+For production applications, use a dedicated authentication service with token caching:
+
+```csharp
+public interface IUsernamePasswordAuthService
+{
+    Task<string?> AuthenticateAsync(string username, string password);
+    Task<string?> GetCachedTokenAsync(string username);
+}
+
+public class UsernamePasswordAuthService : IUsernamePasswordAuthService
+{
+    private readonly HttpClient _httpClient;
+    private readonly ConcurrentDictionary<string, CachedToken> _tokenCache;
+    private readonly TimeSpan _cacheExpiration;
+
+    public UsernamePasswordAuthService(HttpClient httpClient, TimeSpan? cacheExpiration = null)
+    {
+        _httpClient = httpClient;
+        _tokenCache = new ConcurrentDictionary<string, CachedToken>();
+        _cacheExpiration = cacheExpiration ?? TimeSpan.FromMinutes(10);
+    }
+
+    public async Task<string?> AuthenticateAsync(string username, string password)
+    {
+        try
+        {
+            var loginRequest = new { username, password };
+            var json = JsonSerializer.Serialize(loginRequest);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync("/auth/login", content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var authResponse = JsonSerializer.Deserialize<AuthResponse>(responseContent);
+                
+                if (authResponse?.Token != null)
+                {
+                    // Cache the token
+                    var cachedToken = new CachedToken
+                    {
+                        Token = authResponse.Token,
+                        ExpiresAt = DateTime.UtcNow.AddSeconds(authResponse.ExpiresIn)
+                    };
+                    
+                    _tokenCache.AddOrUpdate(username, cachedToken, (key, oldValue) => cachedToken);
+                    return authResponse.Token;
+                }
+            }
+            
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public Task<string?> GetCachedTokenAsync(string username)
+    {
+        if (_tokenCache.TryGetValue(username, out var cachedToken))
+        {
+            if (DateTime.UtcNow < cachedToken.ExpiresAt)
+            {
+                return Task.FromResult<string?>(cachedToken.Token);
+            }
+            else
+            {
+                // Token expired, remove from cache
+                _tokenCache.TryRemove(username, out _);
+            }
+        }
+        
+        return Task.FromResult<string?>(null);
+    }
+}
+```
+
+### Custom Auth Provider with Service
+
+```csharp
+public class CustomAuthProvider : IApiAuthProvider
+{
+    private readonly IUsernamePasswordAuthService _authService;
+    private readonly string _username;
+    private readonly string _password;
+
+    public CustomAuthProvider(
+        IUsernamePasswordAuthService authService, 
+        string username, 
+        string password)
+    {
+        _authService = authService;
+        _username = username;
+        _password = password;
+    }
+
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
+    {
+        // Use the provided credentials or fall back to defaults
+        var targetUsername = username ?? _username;
+        var targetPassword = password ?? _password;
+
+        // First, try to get a cached token
+        var cachedToken = await _authService.GetCachedTokenAsync(targetUsername);
+        if (cachedToken != null)
+        {
+            return cachedToken;
+        }
+
+        // No cached token or expired, authenticate to get a new one
+        return await _authService.AuthenticateAsync(targetUsername, targetPassword);
+    }
+}
+```
+
+### Registration with Authentication Service
+
+```csharp
+// Configure HttpClient for auth service
+services.AddHttpClient<IUsernamePasswordAuthService, UsernamePasswordAuthService>(client =>
+{
+    client.BaseAddress = new Uri("https://auth.example.com");
+});
+
+// Configure HttpClient for NaturalApi
+services.AddHttpClient("ApiClient", client =>
+{
+    client.BaseAddress = new Uri("https://api.example.com");
+});
+
+// Register NaturalApi with custom auth provider
+services.AddNaturalApi<CustomAuthProvider, CustomApi>("ApiClient", 
+    provider =>
+    {
+        var authService = provider.GetRequiredService<IUsernamePasswordAuthService>();
+        return new CustomAuthProvider(authService, "defaultuser", "defaultpass");
+    },
+    provider =>
+    {
+        var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
+        var httpClient = httpClientFactory.CreateClient("ApiClient");
+        var executor = new HttpClientExecutor(httpClient);
+        var defaults = provider.GetRequiredService<IApiDefaultsProvider>();
+        return new CustomApi(executor, defaults, httpClient);
+    });
 ```
 
 ---
