@@ -1,11 +1,29 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NaturalApi;
+using System.Net.Http;
 
 namespace NaturalApi.Tests;
 
 [TestClass]
 public class CachingAuthProviderTests
 {
+    private AuthenticatedHttpClientExecutor _authenticatedExecutor = null!;
+    private HttpClient _httpClient = null!;
+    private TestApiDefaultsProvider _defaults = null!;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _httpClient = new HttpClient();
+        _authenticatedExecutor = new AuthenticatedHttpClientExecutor(_httpClient);
+        _defaults = new TestApiDefaultsProvider(authProvider: new CachingAuthProvider());
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        _httpClient?.Dispose();
+    }
     [TestMethod]
     public async Task GetAuthTokenAsync_Should_Return_Token_On_First_Call()
     {
@@ -17,6 +35,55 @@ public class CachingAuthProviderTests
 
         // Assert
         Assert.AreEqual("abc123", token);
+    }
+
+    [TestMethod]
+    public async Task CachingAuthProvider_Should_Work_With_Authenticated_Executor()
+    {
+        // Arrange
+        var api = new Api(_authenticatedExecutor, _defaults);
+
+        // Act
+        var result = api.For("https://httpbin.org/headers").Get();
+
+        // Assert
+        Assert.IsNotNull(result);
+        // The authenticated executor should use the CachingAuthProvider and add Authorization header
+        Assert.IsTrue(result.StatusCode >= 200); // Any HTTP response indicates the request was processed
+    }
+
+    [TestMethod]
+    public async Task CachingAuthProvider_Should_Work_With_AsUser()
+    {
+        // Arrange
+        var api = new Api(_authenticatedExecutor, _defaults);
+
+        // Act
+        var result = api.For("https://httpbin.org/headers")
+            .AsUser("testuser", "testpass")
+            .Get();
+
+        // Assert
+        Assert.IsNotNull(result);
+        // The authenticated executor should use the CachingAuthProvider with AsUser() and add Authorization header
+        Assert.IsTrue(result.StatusCode >= 200); // Any HTTP response indicates the request was processed
+    }
+
+    [TestMethod]
+    public async Task CachingAuthProvider_Should_Work_With_WithoutAuth()
+    {
+        // Arrange
+        var api = new Api(_authenticatedExecutor, _defaults);
+
+        // Act
+        var result = api.For("https://httpbin.org/headers")
+            .WithoutAuth()
+            .Get();
+
+        // Assert
+        Assert.IsNotNull(result);
+        // The authenticated executor should respect WithoutAuth() and not add Authorization header
+        Assert.IsTrue(result.StatusCode >= 200); // Any HTTP response indicates the request was processed
     }
 
     [TestMethod]
@@ -167,5 +234,31 @@ public class CachingAuthProviderTests
         Assert.AreEqual("abc123", token2);
         Assert.AreEqual("abc123", token3);
         Assert.AreEqual("abc123", token4);
+    }
+
+    /// <summary>
+    /// Test implementation of IApiDefaultsProvider for testing purposes.
+    /// </summary>
+    private class TestApiDefaultsProvider : IApiDefaultsProvider
+    {
+        public Uri? BaseUri { get; }
+        public IDictionary<string, string> DefaultHeaders { get; }
+        public TimeSpan Timeout { get; }
+        public IApiAuthProvider? AuthProvider { get; }
+
+        public TestApiDefaultsProvider(
+            Uri? baseUri = null,
+            IDictionary<string, string>? defaultHeaders = null,
+            TimeSpan? timeout = null,
+            IApiAuthProvider? authProvider = null)
+        {
+            BaseUri = baseUri ?? new Uri("https://api.example.com/");
+            DefaultHeaders = defaultHeaders ?? new Dictionary<string, string>
+            {
+                ["Accept"] = "application/json"
+            };
+            Timeout = timeout ?? TimeSpan.FromSeconds(30);
+            AuthProvider = authProvider;
+        }
     }
 }

@@ -30,7 +30,7 @@ public class RestSharpAuthTests
     }
 
     [TestMethod]
-    public void RestSharpExecutor_WithAuthProvider_WorksCorrectly()
+    public void RestSharpExecutor_WithAuthProvider_SendsCorrectAuthorizationHeader()
     {
         // Arrange
         var authProvider = new TestAuthProvider();
@@ -38,23 +38,26 @@ public class RestSharpAuthTests
         _serviceProvider = services.BuildServiceProvider();
         var api = _serviceProvider.GetRequiredService<IApi>();
 
-        _wireMockServers.SetupGet("/users", 200, "{\"users\":[]}");
+        // Mock server that ONLY accepts requests with the correct Authorization header from auth provider
+        _wireMockServers.SetupGetWithAuthValidation("/users", 200, "{\"users\":[]}", "Bearer test-token-default");
 
         // Act & Assert
         var result = api.For("/users").Get();
         Assert.AreEqual(200, result.StatusCode);
         Assert.AreEqual("{\"users\":[]}", result.RawBody);
+        // The mock server validates the Authorization header from auth provider was sent correctly
     }
 
     [TestMethod]
-    public void RestSharpExecutor_WithBearerToken_WorksCorrectly()
+    public void RestSharpExecutor_WithBearerToken_SendsCorrectAuthorizationHeader()
     {
         // Arrange
         var services = RestSharpTestHelpers.CreateServiceCollection(_wireMockServers!.BaseUrl);
         _serviceProvider = services.BuildServiceProvider();
         var api = _serviceProvider.GetRequiredService<IApi>();
 
-        _wireMockServers.SetupGet("/users", 200, "{\"users\":[]}");
+        // Mock server that ONLY accepts requests with the correct Authorization header
+        _wireMockServers.SetupGetWithAuthValidation("/users", 200, "{\"users\":[]}", "Bearer test-token-123");
 
         // Act & Assert
         var result = api.For("/users")
@@ -63,17 +66,19 @@ public class RestSharpAuthTests
         
         Assert.AreEqual(200, result.StatusCode);
         Assert.AreEqual("{\"users\":[]}", result.RawBody);
+        // The mock server validates the Authorization header was sent correctly
     }
 
     [TestMethod]
-    public void RestSharpExecutor_WithCustomAuth_WorksCorrectly()
+    public void RestSharpExecutor_WithCustomAuth_SendsCorrectAuthorizationHeader()
     {
         // Arrange
         var services = RestSharpTestHelpers.CreateServiceCollection(_wireMockServers!.BaseUrl);
         _serviceProvider = services.BuildServiceProvider();
         var api = _serviceProvider.GetRequiredService<IApi>();
 
-        _wireMockServers.SetupGet("/users", 200, "{\"users\":[]}");
+        // Mock server that ONLY accepts requests with the correct custom Authorization header
+        _wireMockServers.SetupGetWithAuthValidation("/users", 200, "{\"users\":[]}", "Custom test-auth-token");
 
         // Act & Assert
         var result = api.For("/users")
@@ -82,10 +87,11 @@ public class RestSharpAuthTests
         
         Assert.AreEqual(200, result.StatusCode);
         Assert.AreEqual("{\"users\":[]}", result.RawBody);
+        // The mock server validates the custom Authorization header was sent correctly
     }
 
     [TestMethod]
-    public void RestSharpExecutor_WithUserContext_WorksCorrectly()
+    public void RestSharpExecutor_WithUserContext_SendsCorrectAuthorizationHeader()
     {
         // Arrange
         var authProvider = new TestAuthProvider();
@@ -93,7 +99,8 @@ public class RestSharpAuthTests
         _serviceProvider = services.BuildServiceProvider();
         var api = _serviceProvider.GetRequiredService<IApi>();
 
-        _wireMockServers.SetupGet("/users", 200, "{\"users\":[]}");
+        // Mock server that ONLY accepts requests with the correct Authorization header for specific user
+        _wireMockServers.SetupGetWithAuthValidation("/users", 200, "{\"users\":[]}", "Bearer test-token-testuser");
 
         // Act & Assert
         var result = api.For("/users")
@@ -102,10 +109,11 @@ public class RestSharpAuthTests
         
         Assert.AreEqual(200, result.StatusCode);
         Assert.AreEqual("{\"users\":[]}", result.RawBody);
+        // The mock server validates the Authorization header for specific user was sent correctly
     }
 
     [TestMethod]
-    public void RestSharpExecutor_WithoutAuth_WorksCorrectly()
+    public void RestSharpExecutor_WithoutAuth_DoesNotSendAuthorizationHeader()
     {
         // Arrange
         var authProvider = new TestAuthProvider();
@@ -113,7 +121,8 @@ public class RestSharpAuthTests
         _serviceProvider = services.BuildServiceProvider();
         var api = _serviceProvider.GetRequiredService<IApi>();
 
-        _wireMockServers.SetupGet("/users", 200, "{\"users\":[]}");
+        // Mock server that ONLY accepts requests WITHOUT Authorization header
+        _wireMockServers.SetupGetWithoutAuth("/users", 200, "{\"users\":[]}");
 
         // Act & Assert
         var result = api.For("/users")
@@ -122,17 +131,25 @@ public class RestSharpAuthTests
         
         Assert.AreEqual(200, result.StatusCode);
         Assert.AreEqual("{\"users\":[]}", result.RawBody);
+        // The mock server validates NO Authorization header was sent
     }
 
     [TestMethod]
-    public void RestSharpExecutor_WithAuthAndHeaders_WorksCorrectly()
+    public void RestSharpExecutor_WithAuthAndHeaders_SendsBothHeaders()
     {
         // Arrange
         var services = RestSharpTestHelpers.CreateServiceCollection(_wireMockServers!.BaseUrl);
         _serviceProvider = services.BuildServiceProvider();
         var api = _serviceProvider.GetRequiredService<IApi>();
 
-        _wireMockServers.SetupGet("/users", 200, "{\"users\":[]}");
+        // Mock server that ONLY accepts requests with BOTH Authorization and custom headers
+        _wireMockServers.SetupGetWithHeadersValidation("/users", 200, "{\"users\":[]}", 
+            new Dictionary<string, string>
+            {
+                ["Authorization"] = "Bearer test-token-123",
+                ["Accept"] = "application/json",
+                ["X-Custom-Header"] = "test-value"
+            });
 
         // Act & Assert
         var result = api.For("/users")
@@ -143,6 +160,7 @@ public class RestSharpAuthTests
         
         Assert.AreEqual(200, result.StatusCode);
         Assert.AreEqual("{\"users\":[]}", result.RawBody);
+        // The mock server validates ALL headers were sent correctly
     }
 
     [TestMethod]
@@ -216,23 +234,24 @@ public class RestSharpAuthTests
         _serviceProvider = services.BuildServiceProvider();
         var api = _serviceProvider.GetRequiredService<IApi>();
 
-        _wireMockServers.SetupGet("/users", 200, "{\"users\":[]}");
-
-        // Act & Assert
-        var result = api.For("/users")
+        // Test user 1 - Mock server that ONLY accepts requests with user1's token
+        _wireMockServers.SetupGetWithAuthValidation("/users", 200, "{\"users\":[]}", "Bearer test-token-user1");
+        var result1 = api.For("/users")
             .AsUser("user1", "pass1")
             .Get();
         
-        Assert.AreEqual(200, result.StatusCode);
-        Assert.AreEqual("{\"users\":[]}", result.RawBody);
+        Assert.AreEqual(200, result1.StatusCode);
+        Assert.AreEqual("{\"users\":[]}", result1.RawBody);
         
-        // Test with different user
+        // Test user 2 - Mock server that ONLY accepts requests with user2's token
+        _wireMockServers.SetupGetWithAuthValidation("/users", 200, "{\"users\":[]}", "Bearer test-token-user2");
         var result2 = api.For("/users")
             .AsUser("user2", "pass2")
             .Get();
         
         Assert.AreEqual(200, result2.StatusCode);
         Assert.AreEqual("{\"users\":[]}", result2.RawBody);
+        // The mock server validates different users get different tokens
     }
 }
 

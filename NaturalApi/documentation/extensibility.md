@@ -1,3 +1,4 @@
+# AIModified:2025-10-10T18:34:01Z
 # Extensibility Guide
 
 > NaturalApi is designed to be highly extensible. This guide covers creating custom executors, validators, auth providers, and extending the fluent DSL with new capabilities.
@@ -174,25 +175,25 @@ public class CustomAuthenticatedExecutor : IAuthenticatedHttpExecutor
 
     public IApiResultContext Execute(ApiRequestSpec spec)
     {
-        return ExecuteAsync(spec, _authProvider, null, false).GetAwaiter().GetResult();
+        return ExecuteAsync(spec, _authProvider, null, null, false).GetAwaiter().GetResult();
     }
 
-    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, bool suppressAuth)
+    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, string? password, bool suppressAuth)
     {
-        var request = await BuildAuthenticatedRequest(spec, authProvider, username, suppressAuth);
+        var request = await BuildAuthenticatedRequest(spec, authProvider, username, password, suppressAuth);
         var response = await _httpClient.SendAsync(request);
         
         return new ApiResultContext(response, this);
     }
 
-    private async Task<HttpRequestMessage> BuildAuthenticatedRequest(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, bool suppressAuth)
+    private async Task<HttpRequestMessage> BuildAuthenticatedRequest(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, string? password, bool suppressAuth)
     {
         var request = new HttpRequestMessage(spec.Method, spec.Endpoint);
         
         // Add authentication if not suppressed
         if (!suppressAuth && authProvider != null)
         {
-            var token = await authProvider.GetAuthTokenAsync(username);
+            var token = await authProvider.GetAuthTokenAsync(username, password);
             if (!string.IsNullOrEmpty(token))
             {
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -343,7 +344,7 @@ public class OAuth2AuthProvider : IApiAuthProvider
         _httpClient = httpClient;
     }
 
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         await _semaphore.WaitAsync();
         try
@@ -404,7 +405,7 @@ public class JwtAuthProvider : IApiAuthProvider
         _audience = audience;
     }
 
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         var claims = new Dictionary<string, object>
         {
@@ -433,7 +434,7 @@ public class MultiTenantAuthProvider : IApiAuthProvider
         _tenantProviders = new Dictionary<string, IApiAuthProvider>();
     }
 
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         var tenant = await _tenantResolver.GetCurrentTenantAsync();
         
@@ -1124,6 +1125,369 @@ services.AddNaturalApi<RestSharpHttpExecutor>(provider =>
 // 3. Use exactly like HttpClient-based NaturalApi
 var api = serviceProvider.GetRequiredService<IApi>();
 var result = await api.For("/users").Get().ShouldBeSuccessful();
+```
+
+### Real-World Authenticated Executor Examples
+
+#### RestSharp with Authentication Support
+
+Here's a complete RestSharp implementation that supports authentication:
+
+```csharp
+/// <summary>
+/// RestSharp-based implementation of IAuthenticatedHttpExecutor.
+/// Uses RestSharp's RestClient for HTTP operations with authentication support.
+/// </summary>
+public class RestSharpHttpExecutor : IAuthenticatedHttpExecutor
+{
+    private readonly RestClient _restClient;
+
+    public RestSharpHttpExecutor(RestClient restClient)
+    {
+        _restClient = restClient ?? throw new ArgumentNullException(nameof(restClient));
+    }
+
+    public RestSharpHttpExecutor(string baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            throw new ArgumentNullException(nameof(baseUrl));
+            
+        _restClient = new RestClient(baseUrl);
+    }
+
+    public IApiResultContext Execute(ApiRequestSpec spec)
+    {
+        if (spec == null)
+            throw new ArgumentNullException(nameof(spec));
+
+        try
+        {
+            var url = BuildUrl(spec);
+            var request = new RestRequest(url, GetRestSharpMethod(spec.Method));
+            
+            // Add headers
+            foreach (var header in spec.Headers)
+            {
+                request.AddHeader(header.Key, header.Value);
+            }
+            
+            // Add query parameters
+            foreach (var param in spec.QueryParams)
+            {
+                request.AddQueryParameter(param.Key, param.Value?.ToString() ?? "");
+            }
+            
+            // Add body for POST, PUT, PATCH
+            if (spec.Body != null && (spec.Method == HttpMethod.Post || 
+                                    spec.Method == HttpMethod.Put || 
+                                    spec.Method == HttpMethod.Patch))
+            {
+                request.AddJsonBody(spec.Body);
+            }
+            
+            // Add cookies
+            if (spec.Cookies != null && spec.Cookies.Count > 0)
+            {
+                foreach (var cookie in spec.Cookies)
+                {
+                    request.AddCookie(cookie.Key, cookie.Value, "/", "localhost");
+                }
+            }
+            
+            // Set timeout if specified
+            if (spec.Timeout.HasValue)
+            {
+                request.Timeout = spec.Timeout.Value;
+            }
+            
+            var response = _restClient.Execute(request);
+            return new RestSharpApiResultContext(response, this);
+        }
+        catch (Exception ex)
+        {
+            throw new ApiExecutionException("Error during RestSharp request execution", ex, spec);
+        }
+    }
+
+    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, string? password, bool suppressAuth)
+    {
+        if (spec == null)
+            throw new ArgumentNullException(nameof(spec));
+
+        try
+        {
+            var url = BuildUrl(spec);
+            var request = new RestRequest(url, GetRestSharpMethod(spec.Method));
+            
+            // Add headers
+            foreach (var header in spec.Headers)
+            {
+                request.AddHeader(header.Key, header.Value);
+            }
+            
+            // Add query parameters
+            foreach (var param in spec.QueryParams)
+            {
+                request.AddQueryParameter(param.Key, param.Value?.ToString() ?? "");
+            }
+            
+            // Add cookies if specified
+            if (spec.Cookies != null && spec.Cookies.Count > 0)
+            {
+                foreach (var cookie in spec.Cookies)
+                {
+                    request.AddCookie(cookie.Key, cookie.Value, "/", "localhost");
+                }
+            }
+            
+            // Set timeout if specified
+            if (spec.Timeout.HasValue)
+            {
+                request.Timeout = spec.Timeout.Value;
+            }
+
+            // Handle authentication
+            if (!suppressAuth && authProvider != null)
+            {
+                var token = await authProvider.GetAuthTokenAsync(username, password);
+                if (!string.IsNullOrEmpty(token))
+                {
+                    request.AddHeader("Authorization", $"Bearer {token}");
+                }
+            }
+            
+            var response = _restClient.Execute(request);
+            return new RestSharpApiResultContext(response, this);
+        }
+        catch (Exception ex)
+        {
+            throw new ApiExecutionException("Error during RestSharp request execution", ex, spec);
+        }
+    }
+
+    private string BuildUrl(ApiRequestSpec spec)
+    {
+        var url = spec.Endpoint;
+        
+        // Replace path parameters
+        foreach (var param in spec.PathParams)
+        {
+            url = url.Replace($"{{{param.Key}}}", param.Value?.ToString() ?? "");
+        }
+        
+        if (Uri.IsWellFormedUriString(url, UriKind.Absolute))
+        {
+            return url;
+        }
+        
+        return url;
+    }
+
+    private Method GetRestSharpMethod(HttpMethod method)
+    {
+        return method.Method.ToUpper() switch
+        {
+            "GET" => Method.Get,
+            "POST" => Method.Post,
+            "PUT" => Method.Put,
+            "PATCH" => Method.Patch,
+            "DELETE" => Method.Delete,
+            _ => throw new NotSupportedException($"HTTP method {method.Method} is not supported")
+        };
+    }
+}
+```
+
+#### Playwright with Authentication Support
+
+Here's a complete Playwright implementation that supports authentication:
+
+```csharp
+/// <summary>
+/// Playwright-based implementation of IAuthenticatedHttpExecutor.
+/// Uses Playwright's IAPIRequestContext for HTTP operations with authentication support.
+/// </summary>
+public class PlaywrightHttpExecutor : IAuthenticatedHttpExecutor
+{
+    private readonly IAPIRequestContext _apiRequestContext;
+    private readonly string _baseUrl;
+
+    public PlaywrightHttpExecutor(IAPIRequestContext apiRequestContext, string baseUrl)
+    {
+        _apiRequestContext = apiRequestContext ?? throw new ArgumentNullException(nameof(apiRequestContext));
+        _baseUrl = baseUrl ?? throw new ArgumentNullException(nameof(baseUrl));
+    }
+
+    public PlaywrightHttpExecutor(string baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            throw new ArgumentNullException(nameof(baseUrl));
+            
+        _baseUrl = baseUrl;
+        
+        // Initialize Playwright synchronously
+        var playwright = Microsoft.Playwright.Playwright.CreateAsync().GetAwaiter().GetResult();
+        _apiRequestContext = playwright.APIRequest.NewContextAsync().GetAwaiter().GetResult();
+    }
+
+    public IApiResultContext Execute(ApiRequestSpec spec)
+    {
+        if (spec == null)
+            throw new ArgumentNullException(nameof(spec));
+
+        try
+        {
+            var url = BuildUrl(spec);
+            
+            var requestOptions = new APIRequestContextOptions
+            {
+                Method = GetPlaywrightMethod(spec.Method),
+                Headers = spec.Headers.ToDictionary(h => h.Key, h => h.Value),
+                Data = GetRequestBody(spec)?.ToString(),
+                Timeout = (float?)(spec.Timeout?.TotalMilliseconds ?? 30000)
+            };
+
+            // Add query parameters
+            if (spec.QueryParams.Count > 0)
+            {
+                var queryString = string.Join("&", spec.QueryParams.Select(p => $"{p.Key}={Uri.EscapeDataString(p.Value?.ToString() ?? "")}"));
+                url += (url.Contains("?") ? "&" : "?") + queryString;
+            }
+
+            // Add cookies if specified
+            if (spec.Cookies != null && spec.Cookies.Count > 0)
+            {
+                var cookieHeader = string.Join("; ", spec.Cookies.Select(c => $"{c.Key}={c.Value}"));
+                var headersDict = requestOptions.Headers.ToDictionary(h => h.Key, h => h.Value);
+                if (headersDict.ContainsKey("Cookie"))
+                {
+                    headersDict["Cookie"] += "; " + cookieHeader;
+                }
+                else
+                {
+                    headersDict["Cookie"] = cookieHeader;
+                }
+                requestOptions.Headers = headersDict;
+            }
+            
+            var response = ExecuteRequestByMethod(url, requestOptions, spec.Method);
+            return new PlaywrightApiResultContext(response, this);
+        }
+        catch (Exception ex)
+        {
+            throw new ApiExecutionException("Error during Playwright request execution", ex, spec);
+        }
+    }
+
+    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, string? password, bool suppressAuth)
+    {
+        if (spec == null)
+            throw new ArgumentNullException(nameof(spec));
+
+        try
+        {
+            var url = BuildUrl(spec);
+            
+            var requestOptions = new APIRequestContextOptions
+            {
+                Method = GetPlaywrightMethod(spec.Method),
+                Headers = spec.Headers.ToDictionary(h => h.Key, h => h.Value),
+                Data = GetRequestBody(spec)?.ToString(),
+                Timeout = (float?)(spec.Timeout?.TotalMilliseconds ?? 30000)
+            };
+
+            // Add query parameters
+            if (spec.QueryParams.Count > 0)
+            {
+                var queryString = string.Join("&", spec.QueryParams.Select(p => $"{p.Key}={Uri.EscapeDataString(p.Value?.ToString() ?? "")}"));
+                url += (url.Contains("?") ? "&" : "?") + queryString;
+            }
+
+            // Add cookies if specified
+            if (spec.Cookies != null && spec.Cookies.Count > 0)
+            {
+                var cookieHeader = string.Join("; ", spec.Cookies.Select(c => $"{c.Key}={c.Value}"));
+                var headersDict = requestOptions.Headers.ToDictionary(h => h.Key, h => h.Value);
+                if (headersDict.ContainsKey("Cookie"))
+                {
+                    headersDict["Cookie"] += "; " + cookieHeader;
+                }
+                else
+                {
+                    headersDict["Cookie"] = cookieHeader;
+                }
+                requestOptions.Headers = headersDict;
+            }
+
+            // Handle authentication
+            if (!suppressAuth && authProvider != null)
+            {
+                var token = await authProvider.GetAuthTokenAsync(username, password);
+                if (!string.IsNullOrEmpty(token))
+                {
+                    var headersDict = requestOptions.Headers.ToDictionary(h => h.Key, h => h.Value);
+                    headersDict["Authorization"] = $"Bearer {token}";
+                    requestOptions.Headers = headersDict;
+                }
+            }
+            
+            var response = ExecuteRequestByMethod(url, requestOptions, spec.Method);
+            return new PlaywrightApiResultContext(response, this);
+        }
+        catch (Exception ex)
+        {
+            throw new ApiExecutionException("Error during Playwright request execution", ex, spec);
+        }
+    }
+
+    private string BuildUrl(ApiRequestSpec spec)
+    {
+        var url = spec.Endpoint;
+        
+        // Replace path parameters
+        foreach (var param in spec.PathParams)
+        {
+            url = url.Replace($"{{{param.Key}}}", param.Value?.ToString() ?? "");
+        }
+        
+        if (Uri.IsWellFormedUriString(url, UriKind.Absolute))
+        {
+            return url;
+        }
+        
+        var baseUri = new Uri(_baseUrl);
+        return new Uri(baseUri, url).ToString();
+    }
+
+    private string GetPlaywrightMethod(HttpMethod method)
+    {
+        return method.Method.ToUpper();
+    }
+
+    private object? GetRequestBody(ApiRequestSpec spec)
+    {
+        if (spec.Body != null && (spec.Method == HttpMethod.Post || 
+                                spec.Method == HttpMethod.Put || 
+                                spec.Method == HttpMethod.Patch))
+        {
+            return spec.Body;
+        }
+        return null;
+    }
+
+    private IAPIResponse ExecuteRequestByMethod(string url, APIRequestContextOptions options, HttpMethod method)
+    {
+        return method.Method.ToUpper() switch
+        {
+            "GET" => _apiRequestContext.GetAsync(url, options).GetAwaiter().GetResult(),
+            "POST" => _apiRequestContext.PostAsync(url, options).GetAwaiter().GetResult(),
+            "PUT" => _apiRequestContext.PutAsync(url, options).GetAwaiter().GetResult(),
+            "PATCH" => _apiRequestContext.PatchAsync(url, options).GetAwaiter().GetResult(),
+            "DELETE" => _apiRequestContext.DeleteAsync(url, options).GetAwaiter().GetResult(),
+            _ => throw new NotSupportedException($"HTTP method {method.Method} is not supported")
+        };
+    }
+}
 ```
 
 ### Best Practices for Custom Executors

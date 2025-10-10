@@ -1,3 +1,4 @@
+# AIModified:2025-10-10T18:34:01Z
 # Troubleshooting Guide
 
 > Common issues, solutions, and debugging techniques for NaturalApi.
@@ -112,7 +113,7 @@
    ```csharp
    public class MyAuthProvider : IApiAuthProvider
    {
-       public async Task<string?> GetAuthTokenAsync(string? username = null)
+       public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
        {
            // Return actual token, not null
            return "your-actual-token";
@@ -135,7 +136,7 @@
        private string? _token;
        private DateTime _expires;
 
-       public async Task<string?> GetAuthTokenAsync(string? username = null)
+       public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
        {
            if (_token == null || DateTime.UtcNow > _expires)
            {
@@ -155,7 +156,7 @@
 
 2. **Check Token Expiry**
    ```csharp
-   public async Task<string?> GetAuthTokenAsync(string? username = null)
+   public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
    {
        var token = await GetTokenFromCacheAsync();
        if (IsTokenExpired(token))
@@ -176,7 +177,7 @@
 
 1. **Implement Username Parameter**
    ```csharp
-   public async Task<string?> GetAuthTokenAsync(string? username = null)
+   public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
    {
        if (string.IsNullOrEmpty(username))
            return await GetSystemTokenAsync();
@@ -268,7 +269,7 @@
    // Old interface (username only)
    public interface IApiAuthProvider
    {
-       Task<string?> GetAuthTokenAsync(string? username = null);
+       Task<string?> GetAuthTokenAsync(string? username = null, string? password = null);
    }
 
    // New interface (username and password)

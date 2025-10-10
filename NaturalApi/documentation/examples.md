@@ -1,3 +1,4 @@
+# AIModified:2025-10-10T18:34:01Z
 # Examples
 
 > Real-world scenarios and complete examples demonstrating NaturalApi in action.
@@ -1681,7 +1682,7 @@ public class EnvironmentAuthProvider : IApiAuthProvider
         _httpClient = new HttpClient();
     }
 
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         if (_cachedToken != null && DateTime.UtcNow < _tokenExpiry)
         {

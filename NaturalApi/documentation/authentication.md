@@ -1,3 +1,4 @@
+# AIModified:2025-10-10T18:34:01Z
 # Authentication Guide
 
 > NaturalApi provides flexible authentication options from simple inline tokens to sophisticated auth providers with caching and per-user token resolution.
@@ -186,7 +187,7 @@ public class SimpleAuthProvider : IApiAuthProvider
         _token = token;
     }
     
-    public Task<string?> GetAuthTokenAsync(string? username = null)
+    public Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         return Task.FromResult<string?>(_token);
     }
@@ -208,7 +209,7 @@ var data = await api.For("/protected")
 ```csharp
 public class EnvironmentAuthProvider : IApiAuthProvider
 {
-    public Task<string?> GetAuthTokenAsync(string? username = null)
+    public Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         var token = Environment.GetEnvironmentVariable("API_TOKEN");
         return Task.FromResult<string?>(token);
@@ -228,7 +229,7 @@ public class CachingAuthProvider : IApiAuthProvider
     private string? _token;
     private DateTime _expires;
 
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         if (_token == null || DateTime.UtcNow > _expires)
         {
@@ -261,7 +262,7 @@ public class AdvancedCachingAuthProvider : IApiAuthProvider
         _configuration = configuration;
     }
 
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         await _semaphore.WaitAsync();
         try
@@ -325,7 +326,7 @@ public class MultiUserAuthProvider : IApiAuthProvider
         _tokenService = tokenService;
     }
 
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         if (string.IsNullOrEmpty(username))
             return null;
@@ -527,7 +528,7 @@ public class OAuth2ClientCredentialsProvider : IApiAuthProvider
         _httpClient = httpClient;
     }
 
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         if (_accessToken == null || DateTime.UtcNow >= _expiresAt)
         {
@@ -573,7 +574,7 @@ public class JwtAuthProvider : IApiAuthProvider
         _audience = audience;
     }
 
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         var claims = new Dictionary<string, object>
         {
@@ -606,7 +607,7 @@ public class MultiTenantAuthProvider : IApiAuthProvider
         _tenantProviders = new Dictionary<string, IApiAuthProvider>();
     }
 
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         var tenant = await _tenantResolver.GetCurrentTenantAsync();
         
@@ -791,7 +792,7 @@ public class AuthenticationIntegrationTests
 ```csharp
 public class SecureAuthProvider : IApiAuthProvider
 {
-    public Task<string?> GetAuthTokenAsync(string? username = null)
+    public Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         var token = Environment.GetEnvironmentVariable("API_TOKEN");
         return Task.FromResult<string?>(token);
@@ -808,7 +809,7 @@ public class RefreshableAuthProvider : IApiAuthProvider
     private string? _token;
     private DateTime _expiresAt;
 
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         if (_token == null || DateTime.UtcNow >= _expiresAt)
         {
@@ -838,7 +839,7 @@ public class ResilientAuthProvider : IApiAuthProvider
     private readonly IApiAuthProvider _primaryProvider;
     private readonly IApiAuthProvider _fallbackProvider;
 
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         try
         {
@@ -865,7 +866,7 @@ public class UserContextAuthProvider : IApiAuthProvider
     private readonly ICurrentUserService _currentUser;
     private readonly ITokenService _tokenService;
 
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         var user = _currentUser.GetCurrentUser();
         return await _tokenService.GetTokenForUserAsync(user.Id);

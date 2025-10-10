@@ -1,3 +1,4 @@
+# AIModified:2025-10-10T18:34:01Z
 # API Reference
 
 > Complete reference documentation for all NaturalApi interfaces, classes, and methods.
@@ -268,16 +269,17 @@ public interface IAuthenticatedHttpExecutor : IHttpExecutor
     /// <param name="spec">Request specification containing all request details</param>
     /// <param name="authProvider">Authentication provider for token resolution</param>
     /// <param name="username">Username context for per-user authentication</param>
+    /// <param name="password">Password context for authentication</param>
     /// <param name="suppressAuth">Whether to suppress authentication for this request</param>
     /// <returns>Result context with response data and validation methods</returns>
-    Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, bool suppressAuth);
+    Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, string? password, bool suppressAuth);
 }
 ```
 
 **Usage:**
 ```csharp
 var authExecutor = new AuthenticatedHttpClientExecutor(httpClient);
-var result = await authExecutor.ExecuteAsync(spec, authProvider, "john", false);
+var result = await authExecutor.ExecuteAsync(spec, authProvider, "john", "password", false);
 ```
 
 ---
@@ -296,8 +298,9 @@ public interface IApiAuthProvider
     /// Returning null means no auth header will be added.
     /// </summary>
     /// <param name="username">Optional username for per-user token resolution</param>
+    /// <param name="password">Optional password for authentication</param>
     /// <returns>Authentication token without scheme, or null if no auth should be added</returns>
-    Task<string?> GetAuthTokenAsync(string? username = null);
+    Task<string?> GetAuthTokenAsync(string? username = null, string? password = null);
 }
 ```
 
@@ -305,10 +308,10 @@ public interface IApiAuthProvider
 ```csharp
 public class MyAuthProvider : IApiAuthProvider
 {
-    public async Task<string?> GetAuthTokenAsync(string? username = null)
+    public async Task<string?> GetAuthTokenAsync(string? username = null, string? password = null)
     {
         // Return token for the specified user
-        return await GetTokenForUserAsync(username);
+        return await GetTokenForUserAsync(username, password);
     }
 }
 ```
@@ -672,7 +675,7 @@ Example implementation of IApiAuthProvider that caches tokens and refreshes them
 public class CachingAuthProvider : IApiAuthProvider
 {
     public CachingAuthProvider();
-    public Task<string?> GetAuthTokenAsync(string? username = null);
+    public Task<string?> GetAuthTokenAsync(string? username = null, string? password = null);
 }
 ```
 

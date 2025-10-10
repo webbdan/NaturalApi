@@ -125,4 +125,80 @@ public class WireMockServers
                 .WithBody(responseBody)
                 .WithHeaders(headers ?? new Dictionary<string, string>()));
     }
+
+    /// <summary>
+    /// Sets up a GET endpoint that validates Authorization header.
+    /// </summary>
+    /// <param name="path">Endpoint path</param>
+    /// <param name="statusCode">HTTP status code</param>
+    /// <param name="responseBody">Response body</param>
+    /// <param name="expectedAuthHeader">Expected Authorization header value</param>
+    public void SetupGetWithAuthValidation(string path, int statusCode, string responseBody, string expectedAuthHeader)
+    {
+        _server!.Given(WireMock.RequestBuilders.Request.Create()
+            .WithPath(path)
+            .UsingGet()
+            .WithHeader("Authorization", expectedAuthHeader))
+            .RespondWith(WireMock.ResponseBuilders.Response.Create()
+                .WithStatusCode(statusCode)
+                .WithBody(responseBody));
+    }
+
+    /// <summary>
+    /// Sets up a GET endpoint that logs all requests for debugging.
+    /// </summary>
+    /// <param name="path">Endpoint path</param>
+    /// <param name="statusCode">HTTP status code</param>
+    /// <param name="responseBody">Response body</param>
+    public void SetupGetWithLogging(string path, int statusCode, string responseBody)
+    {
+        _server!.Given(WireMock.RequestBuilders.Request.Create()
+            .WithPath(path)
+            .UsingGet())
+            .RespondWith(WireMock.ResponseBuilders.Response.Create()
+                .WithStatusCode(statusCode)
+                .WithBody(responseBody)
+                .WithHeader("X-Debug", "Request received"));
+    }
+
+    /// <summary>
+    /// Sets up a GET endpoint that expects NO Authorization header.
+    /// </summary>
+    /// <param name="path">Endpoint path</param>
+    /// <param name="statusCode">HTTP status code</param>
+    /// <param name="responseBody">Response body</param>
+    public void SetupGetWithoutAuth(string path, int statusCode, string responseBody)
+    {
+        _server!.Given(WireMock.RequestBuilders.Request.Create()
+            .WithPath(path)
+            .UsingGet()
+            .WithHeader("Authorization", ".*", WireMock.Matchers.MatchBehaviour.RejectOnMatch))
+            .RespondWith(WireMock.ResponseBuilders.Response.Create()
+                .WithStatusCode(statusCode)
+                .WithBody(responseBody));
+    }
+
+    /// <summary>
+    /// Sets up a GET endpoint that validates multiple headers.
+    /// </summary>
+    /// <param name="path">Endpoint path</param>
+    /// <param name="statusCode">HTTP status code</param>
+    /// <param name="responseBody">Response body</param>
+    /// <param name="expectedHeaders">Expected headers and their values</param>
+    public void SetupGetWithHeadersValidation(string path, int statusCode, string responseBody, IDictionary<string, string> expectedHeaders)
+    {
+        var requestBuilder = WireMock.RequestBuilders.Request.Create()
+            .WithPath(path)
+            .UsingGet();
+
+        foreach (var header in expectedHeaders)
+        {
+            requestBuilder = requestBuilder.WithHeader(header.Key, header.Value);
+        }
+
+        _server!.Given(requestBuilder)
+            .RespondWith(WireMock.ResponseBuilders.Response.Create()
+                .WithStatusCode(statusCode)
+                .WithBody(responseBody));
+    }
 }
