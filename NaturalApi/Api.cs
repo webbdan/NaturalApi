@@ -104,6 +104,41 @@ public class Api : IApi
             fullEndpoint = endpoint;
         }
 
+        // Validate that the final URL is well-formed
+        // For absolute URLs, always validate them (but allow path parameters)
+        // For relative URLs, only validate if we have a base URI (meaning we're combining URLs)
+        if (endpoint.StartsWith("http"))
+        {
+            // Allow path parameters like {id} - they will be replaced later
+            var urlWithoutParams = fullEndpoint.Replace("{", "").Replace("}", "");
+            if (!Uri.IsWellFormedUriString(urlWithoutParams, UriKind.Absolute))
+            {
+                throw new ArgumentException($"The URL '{fullEndpoint}' is not a valid absolute URI", nameof(endpoint));
+            }
+        }
+        else if (_defaults?.BaseUri != null || _baseUrl != null)
+        {
+            // Allow path parameters like {id} - they will be replaced later
+            var urlWithoutParams = fullEndpoint.Replace("{", "").Replace("}", "");
+            if (!Uri.IsWellFormedUriString(urlWithoutParams, UriKind.Absolute))
+            {
+                throw new ArgumentException($"The combined URL '{fullEndpoint}' is not a valid absolute URI", nameof(endpoint));
+            }
+        }
+        else
+        {
+            // For relative URLs without base URI, validate that they are reasonable
+            // Check for obviously malformed URLs
+            if (endpoint.Contains("://") || endpoint.Contains(" ") || 
+                endpoint.StartsWith("://") || endpoint.EndsWith("://") ||
+                endpoint.Contains("[") && !endpoint.Contains("]") ||
+                endpoint.StartsWith("http") && !endpoint.StartsWith("http://") && !endpoint.StartsWith("https://") ||
+                endpoint.Contains("-") && !endpoint.Contains("/") && !endpoint.Contains("."))
+            {
+                throw new ArgumentException($"The endpoint '{endpoint}' appears to be malformed", nameof(endpoint));
+            }
+        }
+
         // Create spec with defaults
         var spec = new ApiRequestSpec(
             fullEndpoint,

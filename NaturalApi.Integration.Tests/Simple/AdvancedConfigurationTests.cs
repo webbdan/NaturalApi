@@ -51,7 +51,7 @@ public class AdvancedConfigurationTests
         // Arrange - Create configuration with strongly-typed settings
         var configuration = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
-            .AddJsonFile("appsettings.json", optional: false)
+            .AddJsonFile("Simple/appsettings.json", optional: false)
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["NaturalApiSettings:BaseUrl"] = _wireMockServers.ApiBaseUrl,

@@ -334,6 +334,140 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IApi>(apiFactory);
         return services;
     }
+
+    /// <summary>
+    /// Registers NaturalApi services with a custom HTTP executor.
+    /// This enables using alternative HTTP clients like RestSharp, Playwright, etc.
+    /// </summary>
+    /// <typeparam name="TExecutor">The HTTP executor implementation</typeparam>
+    /// <param name="services">The service collection</param>
+    /// <returns>The service collection for chaining</returns>
+    public static IServiceCollection AddNaturalApi<TExecutor>(this IServiceCollection services)
+        where TExecutor : class, IHttpExecutor
+    {
+        // Register the custom executor
+        services.AddScoped<IHttpExecutor, TExecutor>();
+        
+        // Register the API instance
+        services.AddScoped<IApi>(provider =>
+        {
+            var executor = provider.GetRequiredService<IHttpExecutor>();
+            var defaults = provider.GetService<IApiDefaultsProvider>();
+            
+            if (defaults != null)
+            {
+                return new Api(executor, defaults);
+            }
+            else
+            {
+                return new Api(executor);
+            }
+        });
+
+        // Register default implementations if not already registered
+        if (!services.Any(s => s.ServiceType == typeof(IApiDefaultsProvider)))
+        {
+            services.AddSingleton<IApiDefaultsProvider, DefaultApiDefaults>();
+        }
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers NaturalApi services with a custom HTTP executor using a factory.
+    /// This enables using alternative HTTP clients like RestSharp, Playwright, etc.
+    /// </summary>
+    /// <typeparam name="TExecutor">The HTTP executor implementation</typeparam>
+    /// <param name="services">The service collection</param>
+    /// <param name="executorFactory">Factory function for creating the executor</param>
+    /// <returns>The service collection for chaining</returns>
+    public static IServiceCollection AddNaturalApi<TExecutor>(
+        this IServiceCollection services, 
+        Func<IServiceProvider, TExecutor> executorFactory)
+        where TExecutor : class, IHttpExecutor
+    {
+        // Register the custom executor
+        services.AddScoped<IHttpExecutor>(executorFactory);
+        
+        // Register the API instance
+        services.AddScoped<IApi>(provider =>
+        {
+            var executor = provider.GetRequiredService<IHttpExecutor>();
+            var defaults = provider.GetService<IApiDefaultsProvider>();
+            
+            if (defaults != null)
+            {
+                return new Api(executor, defaults);
+            }
+            else
+            {
+                return new Api(executor);
+            }
+        });
+
+        // Register default implementations if not already registered
+        if (!services.Any(s => s.ServiceType == typeof(IApiDefaultsProvider)))
+        {
+            services.AddSingleton<IApiDefaultsProvider, DefaultApiDefaults>();
+        }
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers NaturalApi services with a custom HTTP executor and options.
+    /// This enables using alternative HTTP clients like RestSharp, Playwright, etc.
+    /// </summary>
+    /// <typeparam name="TExecutor">The HTTP executor implementation</typeparam>
+    /// <typeparam name="TOptions">The options type for the executor</typeparam>
+    /// <param name="services">The service collection</param>
+    /// <param name="configureOptions">Action to configure the executor options</param>
+    /// <returns>The service collection for chaining</returns>
+    public static IServiceCollection AddNaturalApi<TExecutor, TOptions>(
+        this IServiceCollection services,
+        Action<TOptions> configureOptions)
+        where TExecutor : class, IHttpExecutor
+        where TOptions : class, new()
+    {
+        // Configure options
+        var options = new TOptions();
+        configureOptions(options);
+        
+        // Register options
+        services.AddSingleton(options);
+        
+        // Register the custom executor with options
+        services.AddScoped<IHttpExecutor>(provider =>
+        {
+            var optionsInstance = provider.GetRequiredService<TOptions>();
+            return Activator.CreateInstance(typeof(TExecutor), optionsInstance) as TExecutor
+                ?? throw new InvalidOperationException($"Failed to create {typeof(TExecutor).Name}");
+        });
+        
+        // Register the API instance
+        services.AddScoped<IApi>(provider =>
+        {
+            var executor = provider.GetRequiredService<IHttpExecutor>();
+            var defaults = provider.GetService<IApiDefaultsProvider>();
+            
+            if (defaults != null)
+            {
+                return new Api(executor, defaults);
+            }
+            else
+            {
+                return new Api(executor);
+            }
+        });
+
+        // Register default implementations if not already registered
+        if (!services.Any(s => s.ServiceType == typeof(IApiDefaultsProvider)))
+        {
+            services.AddSingleton<IApiDefaultsProvider, DefaultApiDefaults>();
+        }
+
+        return services;
+    }
 }
 
 /// <summary>

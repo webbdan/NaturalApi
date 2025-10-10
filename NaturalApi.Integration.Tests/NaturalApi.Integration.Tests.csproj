@@ -23,4 +23,8 @@
     <ProjectReference Include="..\NaturalApi\NaturalApi.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Simple\appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

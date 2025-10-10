@@ -38,7 +38,7 @@ public class ConfigurationIntegrationTests
         // Arrange - Create configuration from appsettings.json
         var configuration = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
-            .AddJsonFile("appsettings.json", optional: false)
+            .AddJsonFile("Simple/appsettings.json", optional: false)
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ApiSettings:BaseUrl"] = _wireMockServers.ApiBaseUrl,

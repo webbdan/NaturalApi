@@ -326,6 +326,82 @@ public class FluentSyntaxTests
         
         Console.WriteLine($"✅ GET /posts/1 with custom headers - ID: {response.id}");
     }
+
+    [TestMethod]
+    public void For_WithValidAbsoluteUrl_ShouldNotThrow()
+    {
+        // Act & Assert - Valid absolute URLs should work
+        Assert.IsNotNull(_api.For("https://api.example.com/users"));
+        Assert.IsNotNull(_api.For("http://localhost:3000/api/data"));
+        Assert.IsNotNull(_api.For("https://jsonplaceholder.typicode.com/posts"));
+    }
+
+    [TestMethod]
+    public void For_WithValidRelativeUrl_ShouldNotThrow()
+    {
+        // Arrange - Create API with base URL
+        var apiWithBase = new Api("https://api.example.com");
+
+        // Act & Assert - Valid relative URLs should work
+        Assert.IsNotNull(apiWithBase.For("/users"));
+        Assert.IsNotNull(apiWithBase.For("users"));
+        Assert.IsNotNull(apiWithBase.For("/api/v1/data"));
+    }
+
+    [TestMethod]
+    public void For_WithInvalidUrl_ShouldThrowArgumentException()
+    {
+        // Act & Assert - Invalid URLs should throw
+        Assert.ThrowsException<ArgumentException>(() => _api.For("not-a-valid-url"));
+        Assert.ThrowsException<ArgumentException>(() => _api.For("://missing-protocol.com"));
+        Assert.ThrowsException<ArgumentException>(() => _api.For("https://"));
+        Assert.ThrowsException<ArgumentException>(() => _api.For("https:///missing-domain"));
+        Assert.ThrowsException<ArgumentException>(() => _api.For("http://[invalid-ipv6"));
+        Assert.ThrowsException<ArgumentException>(() => _api.For("https://host with spaces.com"));
+    }
+
+    [TestMethod]
+    public void For_WithInvalidCombinedUrl_ShouldThrowArgumentException()
+    {
+        // Arrange - Create API with invalid base URL that would create invalid combined URL
+        var apiWithInvalidBase = new Api("not-a-valid-base-url");
+
+        // Act & Assert - Should throw when combining invalid base with relative URL
+        Assert.ThrowsException<ArgumentException>(() => apiWithInvalidBase.For("/users"));
+    }
+
+    [TestMethod]
+    public void For_WithEmptyOrNullEndpoint_ShouldThrowArgumentException()
+    {
+        // Act & Assert - Empty or null endpoints should throw
+        Assert.ThrowsException<ArgumentException>(() => _api.For(""));
+        Assert.ThrowsException<ArgumentException>(() => _api.For("   "));
+        Assert.ThrowsException<ArgumentException>(() => _api.For(null!));
+        Assert.ThrowsException<ArgumentException>(() => _api.For("///"));
+    }
+
+    [TestMethod]
+    public void For_WithDefaultsProvider_ShouldValidateCombinedUrl()
+    {
+        // Arrange - Create API with defaults provider that has invalid base URI
+        var invalidDefaults = new InvalidBaseUriDefaults();
+        var api = new Api(new HttpClientExecutor(new HttpClient()), invalidDefaults);
+
+        // Act & Assert - Should throw when combining invalid base URI with relative URL
+        Assert.ThrowsException<ArgumentException>(() => api.For("/users"));
+    }
+
+    [TestMethod]
+    public void For_WithValidDefaultsProvider_ShouldWork()
+    {
+        // Arrange - Create API with valid defaults provider
+        var validDefaults = new ValidDefaultsProvider();
+        var api = new Api(new HttpClientExecutor(new HttpClient()), validDefaults);
+
+        // Act & Assert - Should work with valid base URI
+        Assert.IsNotNull(api.For("/users"));
+        Assert.IsNotNull(api.For("users"));
+    }
 }
 
 // DTOs for testing based on JSONPlaceholder API
@@ -402,4 +478,26 @@ public class PhotoDTO
     public string url { get; set; } = string.Empty;
     public string thumbnailUrl { get; set; } = string.Empty;
     public int albumId { get; set; }
+}
+
+/// <summary>
+/// Test defaults provider with invalid base URI for testing URL validation.
+/// </summary>
+public class InvalidBaseUriDefaults : IApiDefaultsProvider
+{
+    public Uri? BaseUri => new Uri("not-a-valid-uri", UriKind.Relative); // This will create an invalid absolute URI when combined
+    public IDictionary<string, string> DefaultHeaders => new Dictionary<string, string>();
+    public TimeSpan Timeout => TimeSpan.FromSeconds(30);
+    public IApiAuthProvider? AuthProvider => null;
+}
+
+/// <summary>
+/// Test defaults provider with valid base URI for testing URL validation.
+/// </summary>
+public class ValidDefaultsProvider : IApiDefaultsProvider
+{
+    public Uri? BaseUri => new Uri("https://api.example.com");
+    public IDictionary<string, string> DefaultHeaders => new Dictionary<string, string>();
+    public TimeSpan Timeout => TimeSpan.FromSeconds(30);
+    public IApiAuthProvider? AuthProvider => null;
 }

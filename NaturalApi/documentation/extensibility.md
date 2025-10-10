@@ -18,6 +18,91 @@
 
 ## Custom HTTP Executors
 
+### Generic Executor Registration
+
+NaturalApi now supports generic registration of custom HTTP executors, making it easy to use alternative HTTP clients like RestSharp, Playwright, or any other library.
+
+#### Simple Generic Registration
+
+```csharp
+// Register a custom executor with default constructor
+services.AddNaturalApi<MyCustomHttpExecutor>();
+```
+
+#### Factory-Based Registration
+
+```csharp
+// Register with a factory function
+services.AddNaturalApi<MyCustomHttpExecutor>(provider => 
+    new MyCustomHttpExecutor("https://api.example.com"));
+```
+
+#### Options-Based Registration
+
+```csharp
+// Register with configuration options
+services.AddNaturalApi<MyCustomHttpExecutor, MyExecutorOptions>(options =>
+{
+    options.BaseUrl = "https://api.example.com";
+    options.Timeout = TimeSpan.FromSeconds(30);
+    options.CustomSetting = "value";
+});
+```
+
+#### Complete RestSharp Example
+
+Here's a complete example of integrating RestSharp as a custom executor:
+
+```csharp
+// 1. Create RestSharp executor
+public class RestSharpHttpExecutor : IHttpExecutor
+{
+    private readonly RestClient _restClient;
+
+    public RestSharpHttpExecutor(RestClient restClient)
+    {
+        _restClient = restClient ?? throw new ArgumentNullException(nameof(restClient));
+    }
+
+    public IApiResultContext Execute(ApiRequestSpec spec)
+    {
+        try
+        {
+            var url = BuildUrl(spec);
+            var request = new RestRequest(url, GetRestSharpMethod(spec.Method));
+            
+            // Add headers, query params, body, etc.
+            foreach (var header in spec.Headers)
+            {
+                request.AddHeader(header.Key, header.Value);
+            }
+            
+            if (spec.Body != null && IsBodyMethod(spec.Method))
+            {
+                request.AddJsonBody(spec.Body);
+            }
+            
+            var response = _restClient.Execute(request);
+            return new RestSharpApiResultContext(response, this);
+        }
+        catch (Exception ex)
+        {
+            throw new ApiExecutionException("RestSharp request failed", ex, spec);
+        }
+    }
+    
+    // ... implementation details
+}
+
+// 2. Register with dependency injection
+services.AddNaturalApi<RestSharpHttpExecutor>(provider => 
+    new RestSharpHttpExecutor(new RestClient("https://api.example.com")));
+
+// 3. Use exactly like HttpClient-based NaturalApi
+var api = serviceProvider.GetRequiredService<IApi>();
+var result = await api.For("/users").Get().ShouldBeSuccessful();
+```
+
 ### Basic Custom Executor
 
 ```csharp
@@ -951,6 +1036,241 @@ public class CustomExecutorTests
         var spec = mockExecutor.LastSpec;
         Assert.IsTrue(spec.Headers.ContainsKey("X-Custom-Header"));
     }
+}
+```
+
+---
+
+## Generic Executor Registration
+
+NaturalApi now supports generic registration of custom HTTP executors, making it easy to use alternative HTTP clients like RestSharp, Playwright, or any other library.
+
+### Simple Generic Registration
+
+```csharp
+// Register a custom executor with default constructor
+services.AddNaturalApi<MyCustomHttpExecutor>();
+```
+
+### Factory-Based Registration
+
+```csharp
+// Register with a factory function
+services.AddNaturalApi<MyCustomHttpExecutor>(provider => 
+    new MyCustomHttpExecutor("https://api.example.com"));
+```
+
+### Options-Based Registration
+
+```csharp
+// Register with configuration options
+services.AddNaturalApi<MyCustomHttpExecutor, MyExecutorOptions>(options =>
+{
+    options.BaseUrl = "https://api.example.com";
+    options.Timeout = TimeSpan.FromSeconds(30);
+    options.CustomSetting = "value";
+});
+```
+
+### Complete RestSharp Example
+
+Here's a complete example of integrating RestSharp as a custom executor:
+
+```csharp
+// 1. Create RestSharp executor
+public class RestSharpHttpExecutor : IHttpExecutor
+{
+    private readonly RestClient _restClient;
+
+    public RestSharpHttpExecutor(RestClient restClient)
+    {
+        _restClient = restClient ?? throw new ArgumentNullException(nameof(restClient));
+    }
+
+    public IApiResultContext Execute(ApiRequestSpec spec)
+    {
+        try
+        {
+            var url = BuildUrl(spec);
+            var request = new RestRequest(url, GetRestSharpMethod(spec.Method));
+            
+            // Add headers, query params, body, etc.
+            foreach (var header in spec.Headers)
+            {
+                request.AddHeader(header.Key, header.Value);
+            }
+            
+            if (spec.Body != null && IsBodyMethod(spec.Method))
+            {
+                request.AddJsonBody(spec.Body);
+            }
+            
+            var response = _restClient.Execute(request);
+            return new RestSharpApiResultContext(response, this);
+        }
+        catch (Exception ex)
+        {
+            throw new ApiExecutionException("RestSharp request failed", ex, spec);
+        }
+    }
+    
+    // ... implementation details
+}
+
+// 2. Register with dependency injection
+services.AddNaturalApi<RestSharpHttpExecutor>(provider => 
+    new RestSharpHttpExecutor(new RestClient("https://api.example.com")));
+
+// 3. Use exactly like HttpClient-based NaturalApi
+var api = serviceProvider.GetRequiredService<IApi>();
+var result = await api.For("/users").Get().ShouldBeSuccessful();
+```
+
+### Best Practices for Custom Executors
+
+#### 1. Handle All Request Components
+Your custom executor should handle all aspects of the `ApiRequestSpec`:
+
+```csharp
+public IApiResultContext Execute(ApiRequestSpec spec)
+{
+    // Handle URL building
+    var url = BuildUrl(spec);
+    
+    // Handle HTTP method
+    var request = new RestRequest(url, GetMethod(spec.Method));
+    
+    // Handle headers
+    foreach (var header in spec.Headers)
+    {
+        request.AddHeader(header.Key, header.Value);
+    }
+    
+    // Handle query parameters
+    foreach (var param in spec.QueryParams)
+    {
+        request.AddQueryParameter(param.Key, param.Value?.ToString());
+    }
+    
+    // Handle path parameters
+    foreach (var param in spec.PathParams)
+    {
+        url = url.Replace($"{{{param.Key}}}", param.Value?.ToString());
+    }
+    
+    // Handle request body
+    if (spec.Body != null && IsBodyMethod(spec.Method))
+    {
+        request.AddJsonBody(spec.Body);
+    }
+    
+    // Handle cookies
+    if (spec.Cookies != null)
+    {
+        foreach (var cookie in spec.Cookies)
+        {
+            request.AddCookie(cookie.Key, cookie.Value);
+        }
+    }
+    
+    // Handle timeout
+    if (spec.Timeout.HasValue)
+    {
+        request.Timeout = (int)spec.Timeout.Value.TotalMilliseconds;
+    }
+    
+    // Execute and return result
+    var response = _client.Execute(request);
+    return new MyApiResultContext(response, this);
+}
+```
+
+#### 2. Implement Proper Result Context
+Your result context should implement all `IApiResultContext` methods:
+
+```csharp
+public class MyApiResultContext : IApiResultContext
+{
+    private readonly MyResponse _response;
+    private readonly MyHttpExecutor _executor;
+
+    public MyApiResultContext(MyResponse response, MyHttpExecutor executor)
+    {
+        _response = response;
+        _executor = executor;
+    }
+
+    public int StatusCode => _response.StatusCode;
+    public IDictionary<string, string> Headers => _response.Headers;
+    public string RawBody => _response.Content;
+
+    public T BodyAs<T>()
+    {
+        return JsonSerializer.Deserialize<T>(RawBody) 
+            ?? throw new InvalidOperationException("Deserialization failed");
+    }
+
+    // Implement all validation methods...
+    public IApiResultContext ShouldReturn<T>(int? status = null, Func<T, bool>? bodyValidator = null, Func<IDictionary<string, string>, bool>? headers = null)
+    {
+        // Validation logic
+        return this;
+    }
+    
+    // ... other methods
+}
+```
+
+#### 3. Handle Async Executors
+If your HTTP client is async, you can still implement the sync interface:
+
+```csharp
+public IApiResultContext Execute(ApiRequestSpec spec)
+{
+    // Use GetAwaiter().GetResult() for sync interface
+    return ExecuteAsync(spec).GetAwaiter().GetResult();
+}
+
+private async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec)
+{
+    var response = await _asyncClient.SendAsync(request);
+    return new MyApiResultContext(response, this);
+}
+```
+
+#### 4. Configuration Options Pattern
+Use strongly-typed options for configuration:
+
+```csharp
+public class MyExecutorOptions
+{
+    public string BaseUrl { get; set; } = string.Empty;
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
+    public Dictionary<string, string> DefaultHeaders { get; set; } = new();
+    public bool IgnoreSslErrors { get; set; } = false;
+}
+
+// Register with options
+services.AddNaturalApi<MyHttpExecutor, MyExecutorOptions>(options =>
+{
+    options.BaseUrl = "https://api.example.com";
+    options.Timeout = TimeSpan.FromMinutes(2);
+    options.DefaultHeaders["User-Agent"] = "MyApp/1.0";
+});
+```
+
+#### 5. Error Handling
+Always wrap exceptions with `ApiExecutionException`:
+
+```csharp
+try
+{
+    var response = _client.Execute(request);
+    return new MyApiResultContext(response, this);
+}
+catch (Exception ex)
+{
+    throw new ApiExecutionException("Request execution failed", ex, spec);
 }
 ```
 
