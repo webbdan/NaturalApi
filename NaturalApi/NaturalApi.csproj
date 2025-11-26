@@ -1,5 +1,4 @@
-﻿<!-- AIModified:2025-10-10T14:58:44Z -->
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
