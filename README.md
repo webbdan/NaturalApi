@@ -289,6 +289,8 @@ If your tests read like English and fail like humans speak, you’ll actually re
 - [**Error Handling**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/error-handling.md) - Exception types, debugging, troubleshooting
 - [**Testing Guide**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/testing-guide.md) - Unit testing with mocks, integration testing
 - [**Extensibility**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/extensibility.md) - Custom executors, validators, auth providers
+- [**Reporting**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/reporting.md) - Configurable reporters, DI factory and examples
+
 
 ### Reference
 - [**API Reference**](https://github.com/webbdan/NaturalApi/tree/main/NaturalApi/documentation/api-reference.md) - Complete interface and class documentation
