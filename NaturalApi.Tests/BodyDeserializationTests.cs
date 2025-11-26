@@ -14,7 +14,7 @@ public class BodyDeserializationTests
     public void Setup()
     {
         var httpClient = new HttpClient();
-        var executor = new HttpClientExecutor(httpClient);
+        var executor = new HttpClientExecutor(httpClient, null);
         _api = new Api(executor);
     }
 
@@ -82,7 +82,7 @@ public class BodyDeserializationTests
         {
             Content = new StringContent("")
         };
-        var result = new ApiResultContext(response, new MockHttpExecutor());
+        var result = new ApiResultContext(response, 0, new MockHttpExecutor());
 
         // Act & Assert
         Assert.ThrowsException<InvalidOperationException>(() => result.BodyAs<Post>());
@@ -96,7 +96,7 @@ public class BodyDeserializationTests
         {
             Content = new StringContent("invalid json")
         };
-        var result = new ApiResultContext(response, new MockHttpExecutor());
+        var result = new ApiResultContext(response, 0, new MockHttpExecutor());
 
         // Act & Assert
         Assert.ThrowsException<InvalidOperationException>(() => result.BodyAs<Post>());

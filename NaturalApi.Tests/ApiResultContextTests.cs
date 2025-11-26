@@ -10,7 +10,7 @@ public class ApiResultContextTests
     public void Should_Throw_ArgumentNullException_When_Constructor_Is_Called_With_Null_Response()
     {
         // Act & Assert
-        Assert.ThrowsException<ArgumentNullException>(() => new ApiResultContext(null!, new MockHttpExecutor()));
+        Assert.ThrowsException<ArgumentNullException>(() => new ApiResultContext(null!, 0, new MockHttpExecutor()));
     }
 
     [TestMethod]
@@ -20,7 +20,7 @@ public class ApiResultContextTests
         var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK);
 
         // Act
-        var result = new ApiResultContext(response, new MockHttpExecutor());
+        var result = new ApiResultContext(response, 0, new MockHttpExecutor());
 
         // Assert
         Assert.AreEqual(200, result.StatusCode);
@@ -36,7 +36,7 @@ public class ApiResultContextTests
         };
 
         // Act
-        var result = new ApiResultContext(response, new MockHttpExecutor());
+        var result = new ApiResultContext(response, 0, new MockHttpExecutor()); 
 
         // Assert
         Assert.IsNotNull(result.RawBody);

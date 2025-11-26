@@ -49,6 +49,9 @@ public class PlaywrightApiResultContext : IApiResultContext
     /// </summary>
     public HttpResponseMessage Response => CreateHttpResponseMessage();
 
+    private long _duration;
+    public long Duration { get => _duration; set => _duration = value; }
+
     /// <summary>
     /// Deserializes the response body into the specified type.
     /// </summary>

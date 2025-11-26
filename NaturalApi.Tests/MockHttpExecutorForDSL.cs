@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using NaturalApi.Reporter;
 
 namespace NaturalApi.Tests;
 
@@ -9,6 +10,9 @@ namespace NaturalApi.Tests;
 /// </summary>
 public class MockHttpExecutorForDSL : IHttpExecutor
 {
+    private INaturalReporter _reporter = new NullReporter();
+    public INaturalReporter Reporter { get => _reporter; set => _reporter = value ?? new NullReporter(); }
+
     public IApiResultContext Execute(ApiRequestSpec spec)
     {
         return ExecuteAsync(spec).Result;
@@ -49,88 +53,90 @@ public class MockHttpExecutorForDSL : IHttpExecutor
 
         return new MockApiResultContextForDSL(response);
     }
-}
 
-/// <summary>
-/// Mock API result context for DSL testing.
-/// </summary>
-public class MockApiResultContextForDSL : IApiResultContext
-{
-    public HttpResponseMessage Response { get; }
-    public int StatusCode { get; }
-    public IDictionary<string, string> Headers { get; }
-    public string RawBody { get; }
-
-    public MockApiResultContextForDSL(HttpResponseMessage response)
+    /// <summary>
+    /// Mock API result context for DSL testing.
+    /// </summary>
+    public class MockApiResultContextForDSL : IApiResultContext
     {
-        Response = response;
-        StatusCode = (int)response.StatusCode;
-        Headers = new Dictionary<string, string>();
-        
-        // Add response headers
-        foreach (var header in response.Headers)
+        public HttpResponseMessage Response { get; }
+        public int StatusCode { get; }
+        public IDictionary<string, string> Headers { get; }
+        public string RawBody { get; }
+        public long Duration { get; set; }
+
+        public MockApiResultContextForDSL(HttpResponseMessage response)
         {
-            Headers[header.Key] = string.Join(", ", header.Value);
+            Response = response;
+            StatusCode = (int)response.StatusCode;
+            Headers = new Dictionary<string, string>();
+            
+            // Add response headers
+            foreach (var header in response.Headers)
+            {
+                Headers[header.Key] = string.Join(", ", header.Value);
+            }
+            
+            // Add content headers
+            foreach (var header in response.Content.Headers)
+            {
+                Headers[header.Key] = string.Join(", ", header.Value);
+            }
+
+            RawBody = response.Content.ReadAsStringAsync().Result;
+            Duration = 0;
         }
-        
-        // Add content headers
-        foreach (var header in response.Content.Headers)
+
+        public T BodyAs<T>()
         {
-            Headers[header.Key] = string.Join(", ", header.Value);
+            return System.Text.Json.JsonSerializer.Deserialize<T>(RawBody)!;
         }
 
-        RawBody = response.Content.ReadAsStringAsync().Result;
-    }
+        public IApiResultContext ShouldReturn<T>(
+            int? status = null,
+            Func<T, bool>? bodyValidator = null,
+            Func<IDictionary<string, string>, bool>? headers = null)
+        {
+            // Mock implementation - in real tests this would perform actual validation
+            return this;
+        }
 
-    public T BodyAs<T>()
-    {
-        return System.Text.Json.JsonSerializer.Deserialize<T>(RawBody)!;
-    }
+        public IApiResultContext ShouldReturn(int status)
+        {
+            // Mock implementation - in real tests this would perform actual validation
+            return this;
+        }
 
-    public IApiResultContext ShouldReturn<T>(
-        int? status = null,
-        Func<T, bool>? bodyValidator = null,
-        Func<IDictionary<string, string>, bool>? headers = null)
-    {
-        // Mock implementation - in real tests this would perform actual validation
-        return this;
-    }
+        public IApiResultContext ShouldReturn<T>(Func<T, bool> bodyValidator)
+        {
+            // Mock implementation - in real tests this would perform actual validation
+            return this;
+        }
 
-    public IApiResultContext ShouldReturn(int status)
-    {
-        // Mock implementation - in real tests this would perform actual validation
-        return this;
-    }
+        public IApiResultContext ShouldReturn(int status, Func<IDictionary<string, string>, bool> headers)
+        {
+            // Mock implementation - in real tests this would perform actual validation
+            return this;
+        }
 
-    public IApiResultContext ShouldReturn<T>(Func<T, bool> bodyValidator)
-    {
-        // Mock implementation - in real tests this would perform actual validation
-        return this;
-    }
+        public T ShouldReturn<T>()
+        {
+            // Mock implementation - in real tests this would validate and return deserialized object
+            return BodyAs<T>();
+        }
 
-    public IApiResultContext ShouldReturn(int status, Func<IDictionary<string, string>, bool> headers)
-    {
-        // Mock implementation - in real tests this would perform actual validation
-        return this;
-    }
+        public IApiResultContext Then(Action<IApiResult> next)
+        {
+            // Mock implementation - in real tests this would execute the action
+            var result = new ApiResult(this, new MockHttpExecutorForDSL());
+            next?.Invoke(result);
+            return this;
+        }
 
-    public T ShouldReturn<T>()
-    {
-        // Mock implementation - in real tests this would validate and return deserialized object
-        return BodyAs<T>();
-    }
-
-    public IApiResultContext Then(Action<IApiResult> next)
-    {
-        // Mock implementation - in real tests this would execute the action
-        var result = new ApiResult(this, new MockHttpExecutorForDSL());
-        next?.Invoke(result);
-        return this;
-    }
-
-    public string? GetCookie(string name)
-    {
-        // Mock implementation - return null for testing
-        return null;
+        public string? GetCookie(string name)
+        {
+            // Mock implementation - return null for testing
+            return null;
+        }
     }
 }

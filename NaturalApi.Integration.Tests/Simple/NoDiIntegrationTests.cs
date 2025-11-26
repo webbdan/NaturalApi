@@ -1,5 +1,6 @@
 using NaturalApi;
 using NaturalApi.Integration.Tests.Common;
+using NaturalApi.Reporter;
 
 namespace NaturalApi.Integration.Tests.Simple;
 
@@ -29,6 +30,20 @@ public class NoDiIntegrationTests
     {
         // Arrange - Ultra simple usage - no base URL needed, just use absolute URLs
         var api = new Api();
+
+        // Act - Use absolute URL directly
+        var result = api.For($"{_wireMockServers.ApiBaseUrl}/api/protected").Get();
+
+        // Assert
+        Assert.AreEqual(401, result.StatusCode); // No auth, should be unauthorized
+    }
+
+    [TestMethod]
+    public async Task NoDi_UltraSimpleUsage_NoLogging_ShouldWork()
+    {
+        // Arrange - Ultra simple usage - no base URL needed, just use absolute URLs
+        var api = new Api();
+        api.Reporter = new NullReporter();
 
         // Act - Use absolute URL directly
         var result = api.For($"{_wireMockServers.ApiBaseUrl}/api/protected").Get();

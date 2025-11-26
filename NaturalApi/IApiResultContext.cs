@@ -24,6 +24,7 @@ public interface IApiResultContext
     /// Gets the raw response body as a string.
     /// </summary>
     string RawBody { get; }
+    long Duration { get; set; }
 
     /// <summary>
     /// Deserializes the response body into the specified type.

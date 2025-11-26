@@ -1,4 +1,5 @@
 using NaturalApi;
+using NaturalApi.Reporter;
 
 namespace NaturalApi.Integration.Tests.Common;
 
@@ -11,7 +12,7 @@ public class CustomApi : IApi
     private readonly IApiDefaultsProvider? _defaults;
     private readonly HttpClient _httpClient;
 
-    public CustomApi(IHttpExecutor httpExecutor, IApiDefaultsProvider? defaults, HttpClient httpClient)
+    public CustomApi(IHttpExecutor httpExecutor, IApiDefaultsProvider? defaults, HttpClient httpClient, INaturalReporter? reporter = null)
     {
         _httpExecutor = httpExecutor ?? throw new ArgumentNullException(nameof(httpExecutor));
         _defaults = defaults;

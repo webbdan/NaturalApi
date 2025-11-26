@@ -1,3 +1,8 @@
+using NaturalApi.Reporter;
+using Spectre.Console;
+using System.Diagnostics;
+using System.Reflection.Metadata.Ecma335;
+
 namespace NaturalApi;
 
 /// <summary>
@@ -7,15 +12,19 @@ namespace NaturalApi;
 public class HttpClientExecutor : IHttpExecutor
 {
     private readonly HttpClient _httpClient;
+    private INaturalReporter _reporter;
 
     /// <summary>
     /// Initializes a new instance of the HttpClientExecutor class.
     /// </summary>
     /// <param name="httpClient">HttpClient instance for making requests</param>
-    public HttpClientExecutor(HttpClient httpClient)
+    public HttpClientExecutor(HttpClient httpClient, INaturalReporter? reporter = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _reporter = reporter ?? new DefaultReporter();
     }
+
+    public INaturalReporter Reporter { get { return _reporter; } set { _reporter = value; } }
 
     /// <summary>
     /// Executes an HTTP request based on the provided specification.
@@ -66,6 +75,13 @@ public class HttpClientExecutor : IHttpExecutor
             
             // Execute the request with timeout if specified
             HttpResponseMessage response;
+            var sw = new Stopwatch();
+            sw.Start();
+
+            // Use per-request reporter if set, otherwise executor reporter
+            var reporterToUse = spec.Reporter ?? _reporter;
+            reporterToUse.OnRequestSent(spec);
+
             if (spec.Timeout.HasValue)
             {
                 using var cts = new CancellationTokenSource(spec.Timeout.Value);
@@ -75,8 +91,11 @@ public class HttpClientExecutor : IHttpExecutor
             {
                 response = _httpClient.Send(request);
             }
-            
-            return new ApiResultContext(response, this);
+            sw.Stop();
+
+            var result = new ApiResultContext(response, sw.ElapsedMilliseconds, this);
+            reporterToUse.OnResponseReceived(result);
+            return result;
         }
         catch (Exception ex)
         {

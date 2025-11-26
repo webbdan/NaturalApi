@@ -1,3 +1,6 @@
+using NaturalApi.Reporter;
+using System.Diagnostics;
+
 namespace NaturalApi;
 
 /// <summary>
@@ -33,6 +36,7 @@ public sealed class ApiContext : IApiContext
         _spec = spec ?? throw new ArgumentNullException(nameof(spec));
         _executor = executor ?? throw new ArgumentNullException(nameof(executor));
         _authProvider = authProvider;
+        
     }
 
     /// <summary>
@@ -215,6 +219,16 @@ public sealed class ApiContext : IApiContext
     }
 
     /// <summary>
+    /// Set a reporter for this request (per-call override).
+    /// </summary>
+    public IApiContext WithReporter(INaturalReporter reporter)
+    {
+        if (reporter == null) throw new ArgumentNullException(nameof(reporter));
+        var newSpec = _spec.WithReporter(reporter);
+        return new ApiContext(newSpec, _executor, _authProvider);
+    }
+
+    /// <summary>
     /// Executes a GET request.
     /// </summary>
     public IApiResultContext Get()
@@ -266,6 +280,7 @@ public sealed class ApiContext : IApiContext
     /// <returns>Result context</returns>
     private IApiResultContext ExecuteWithAuth(ApiRequestSpec spec)
     {
+        
         if (_executor is IAuthenticatedHttpExecutor authExecutor && _authProvider != null)
         {
             // Use authenticated executor
@@ -276,5 +291,6 @@ public sealed class ApiContext : IApiContext
             // Use regular executor
             return _executor.Execute(spec);
         }
+
     }
 }

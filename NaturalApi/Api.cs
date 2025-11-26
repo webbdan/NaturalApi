@@ -1,3 +1,6 @@
+using NaturalApi.Reporter;
+using Spectre.Console;
+
 namespace NaturalApi;
 
 /// <summary>
@@ -6,9 +9,16 @@ namespace NaturalApi;
 /// </summary>
 public class Api : IApi
 {
-    private readonly IHttpExecutor _httpExecutor;
+    private IHttpExecutor _httpExecutor;
     private readonly IApiDefaultsProvider? _defaults;
     private readonly string? _baseUrl;
+    private INaturalReporter _reporter = new DefaultReporter();
+
+    public INaturalReporter Reporter
+    {
+        get { return _reporter; }
+        set { _reporter = value; _httpExecutor.Reporter = _reporter; }
+    }
 
     /// <summary>
     /// Initializes a new instance of the Api class.
@@ -17,6 +27,8 @@ public class Api : IApi
     public Api(IHttpExecutor httpExecutor)
     {
         _httpExecutor = httpExecutor ?? throw new ArgumentNullException(nameof(httpExecutor));
+        // prefer executor reporter if present
+        _reporter = httpExecutor.Reporter ?? new DefaultReporter();
     }
 
     /// <summary>
@@ -25,20 +37,28 @@ public class Api : IApi
     /// </summary>
     public Api()
     {
-        _httpExecutor = new HttpClientExecutor(new HttpClient());
+        _reporter = new DefaultReporter();
+        _httpExecutor = new HttpClientExecutor(new HttpClient(), _reporter);
     }
 
     /// <summary>
     /// Initializes a new instance of the Api class with a base URL.
     /// </summary>
     /// <param name="baseUrl">Base URL for all requests</param>
-    public Api(string baseUrl)
+    public Api(string baseUrl, INaturalReporter? reporter = null)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
             throw new ArgumentNullException(nameof(baseUrl));
         
         _baseUrl = baseUrl;
-        _httpExecutor = new HttpClientExecutor(new HttpClient());
+        _reporter = reporter ?? new DefaultReporter();
+        _httpExecutor = new HttpClientExecutor(new HttpClient(), _reporter);
+    }
+
+    public Api(INaturalReporter reporter)
+    {
+        _reporter = reporter ?? new DefaultReporter();
+        _httpExecutor = new HttpClientExecutor(new HttpClient(), _reporter);
     }
 
     /// <summary>
@@ -46,10 +66,11 @@ public class Api : IApi
     /// </summary>
     /// <param name="httpExecutor">HTTP executor for making requests</param>
     /// <param name="defaults">Default configuration provider</param>
-    public Api(IHttpExecutor httpExecutor, IApiDefaultsProvider defaults)
+    public Api(IHttpExecutor httpExecutor, IApiDefaultsProvider defaults, INaturalReporter? reporter = null)
     {
         _httpExecutor = httpExecutor ?? throw new ArgumentNullException(nameof(httpExecutor));
         _defaults = defaults ?? throw new ArgumentNullException(nameof(defaults));
+        _reporter = reporter ?? _defaults.Reporter ?? _httpExecutor.Reporter ?? new DefaultReporter();
     }
 
     /// <summary>
@@ -65,10 +86,13 @@ public class Api : IApi
         
         _defaults = defaults;
         
+        // Choose reporter from defaults or fallback
+        _reporter = defaults.Reporter ?? new DefaultReporter();
+        
         // Automatically choose the right executor based on authentication
         _httpExecutor = defaults.AuthProvider != null 
-            ? new AuthenticatedHttpClientExecutor(httpClient)
-            : new HttpClientExecutor(httpClient);
+            ? new AuthenticatedHttpClientExecutor(httpClient, _reporter)
+            : new HttpClientExecutor(httpClient, _reporter);
     }
 
     /// <summary>
@@ -147,7 +171,8 @@ public class Api : IApi
             new Dictionary<string, object>(),
             new Dictionary<string, object>(),
             null,
-            _defaults?.Timeout);
+            _defaults?.Timeout,
+            Reporter: _defaults?.Reporter ?? _reporter);
 
         // The executor is already configured correctly in the constructor
         return new ApiContext(spec, _httpExecutor, _defaults?.AuthProvider);

@@ -1,4 +1,5 @@
 using NaturalApi;
+using NaturalApi.Reporter;
 
 namespace NaturalApi.Tests;
 
@@ -11,8 +12,11 @@ internal class MockHttpExecutor : IHttpExecutor
     public ApiRequestSpec LastSpec { get; private set; } = null!;
     
     private int _statusCode = 200;
-    private string _responseBody = """{"message":"Mock response"}""";
+    private string _responseBody = """{""message":"Mock response"}""";
     private IDictionary<string, string> _headers = new Dictionary<string, string>();
+
+    private INaturalReporter _reporter = new NullReporter();
+    public INaturalReporter Reporter { get => _reporter; set => _reporter = value ?? new NullReporter(); }
 
     public void SetupResponse(int statusCode, string responseBody, IDictionary<string, string>? headers = null)
     {
@@ -52,6 +56,7 @@ internal class MockApiResultContext : IApiResultContext
     public int StatusCode { get; }
     public IDictionary<string, string> Headers { get; }
     public string RawBody { get; }
+    public long Duration { get; set; }
     private readonly IHttpExecutor _httpExecutor;
 
     public MockApiResultContext(HttpResponseMessage response, string responseBody, IDictionary<string, string> headers, IHttpExecutor httpExecutor)
@@ -61,6 +66,7 @@ internal class MockApiResultContext : IApiResultContext
         Headers = headers;
         RawBody = responseBody;
         _httpExecutor = httpExecutor ?? throw new ArgumentNullException(nameof(httpExecutor));
+        Duration = 0;
     }
 
     public T BodyAs<T>()

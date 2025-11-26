@@ -1,3 +1,5 @@
+using NaturalApi.Reporter;
+
 namespace NaturalApi;
 
 /// <summary>
@@ -9,7 +11,7 @@ public class DefaultApiDefaults : IApiDefaultsProvider
     /// <summary>
     /// Initializes a new instance of DefaultApiDefaults with default values.
     /// </summary>
-    public DefaultApiDefaults() : this(null, null, TimeSpan.FromSeconds(30), null)
+    public DefaultApiDefaults() : this(null, null, TimeSpan.FromSeconds(30), null, null)
     {
     }
 
@@ -20,16 +22,19 @@ public class DefaultApiDefaults : IApiDefaultsProvider
     /// <param name="defaultHeaders">Default headers to be added to all requests</param>
     /// <param name="timeout">Default timeout for requests</param>
     /// <param name="authProvider">Authentication provider for automatic token resolution</param>
+    /// <param name="reporter">Optional reporter to use for this defaults provider</param>
     public DefaultApiDefaults(
         Uri? baseUri = null,
         IDictionary<string, string>? defaultHeaders = null,
         TimeSpan? timeout = null,
-        IApiAuthProvider? authProvider = null)
+        IApiAuthProvider? authProvider = null,
+        NaturalApi.Reporter.INaturalReporter? reporter = null)
     {
         BaseUri = baseUri;
         DefaultHeaders = defaultHeaders ?? new Dictionary<string, string>();
         Timeout = timeout ?? TimeSpan.FromSeconds(30);
         AuthProvider = authProvider;
+        Reporter = reporter;
     }
 
     /// <summary>
@@ -52,4 +57,9 @@ public class DefaultApiDefaults : IApiDefaultsProvider
     /// Can be null if no authentication is configured.
     /// </summary>
     public IApiAuthProvider? AuthProvider { get; }
+
+    /// <summary>
+    /// Optional reporter to be used for this set of APIs (config-level).
+    /// </summary>
+    public NaturalApi.Reporter.INaturalReporter? Reporter { get; }
 }

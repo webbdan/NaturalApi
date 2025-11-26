@@ -1,3 +1,5 @@
+using NaturalApi.Reporter;
+
 namespace NaturalApi;
 
 /// <summary>
@@ -12,4 +14,5 @@ public interface IHttpExecutor
     /// <param name="spec">Request specification containing all request details</param>
     /// <returns>Result context with response data and validation methods</returns>
     IApiResultContext Execute(ApiRequestSpec spec);
+    INaturalReporter Reporter { get; set; }
 }

@@ -12,16 +12,18 @@ public class RestSharpApiResultContext : IApiResultContext
 {
     private readonly RestResponse _response;
     private readonly RestSharpHttpExecutor _executor;
+    private readonly long _duration;
 
     /// <summary>
     /// Initializes a new instance of the RestSharpApiResultContext class.
     /// </summary>
     /// <param name="response">RestSharp response</param>
     /// <param name="executor">RestSharp executor for chaining</param>
-    public RestSharpApiResultContext(RestResponse response, RestSharpHttpExecutor executor)
+    public RestSharpApiResultContext(RestResponse response, long duration, RestSharpHttpExecutor executor)
     {
         _response = response ?? throw new ArgumentNullException(nameof(response));
         _executor = executor ?? throw new ArgumentNullException(nameof(executor));
+        _duration = duration;
     }
 
     /// <summary>
@@ -48,6 +50,8 @@ public class RestSharpApiResultContext : IApiResultContext
     /// Gets the HTTP response message (for compatibility with IApiResultContext).
     /// </summary>
     public HttpResponseMessage Response => CreateHttpResponseMessage();
+
+    public long Duration { get; set; }
 
     /// <summary>
     /// Deserializes the response body into the specified type.

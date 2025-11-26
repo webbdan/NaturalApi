@@ -1,3 +1,5 @@
+using NaturalApi.Reporter;
+
 namespace NaturalApi;
 
 /// <summary>
@@ -25,4 +27,11 @@ public interface IApiDefaultsProvider
     /// Can be null if no authentication is configured.
     /// </summary>
     IApiAuthProvider? AuthProvider { get; }
+
+    /// <summary>
+    /// Optional reporter to be used for this set of APIs (config-level).
+    /// If null, the Api instance or executor default will be used.
+    /// Default implementation returns null for backwards compatibility.
+    /// </summary>
+    INaturalReporter? Reporter => null;
 }

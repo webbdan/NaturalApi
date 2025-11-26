@@ -1,6 +1,8 @@
-using RestSharp;
 using NaturalApi;
 using NaturalApi.Integration.Tests.RestSharp.Tests;
+using NaturalApi.Reporter;
+using RestSharp;
+using System.Diagnostics;
 
 namespace NaturalApi.Integration.Tests.RestSharp.Executors;
 
@@ -11,6 +13,7 @@ namespace NaturalApi.Integration.Tests.RestSharp.Executors;
 public class RestSharpHttpExecutor : IAuthenticatedHttpExecutor
 {
     private readonly RestClient _restClient;
+    private INaturalReporter _reporter = new DefaultReporter();
 
     /// <summary>
     /// Initializes a new instance of the RestSharpHttpExecutor class.
@@ -46,6 +49,8 @@ public class RestSharpHttpExecutor : IAuthenticatedHttpExecutor
 
         _restClient = new RestClient(options.BaseUrl);
     }
+
+    public INaturalReporter Reporter { get { return _reporter; } set { _reporter = value; } }
 
     /// <summary>
     /// Executes an HTTP request based on the provided specification.
@@ -100,11 +105,19 @@ public class RestSharpHttpExecutor : IAuthenticatedHttpExecutor
             {
                 request.Timeout = spec.Timeout.Value;
             }
-            
+
+            _reporter.OnRequestSent(spec);
+            var sw = new Stopwatch();
+            sw.Start();
             // Execute request
             var response = _restClient.Execute(request);
-            
-            return new RestSharpApiResultContext(response, this);
+            sw.Stop();
+
+            var result = new RestSharpApiResultContext(response, sw.ElapsedMilliseconds, this);
+
+            _reporter.OnResponseReceived(result);
+
+            return result;
         }
         catch (Exception ex)
         {
@@ -171,11 +184,21 @@ public class RestSharpHttpExecutor : IAuthenticatedHttpExecutor
                     request.AddHeader("Authorization", $"Bearer {token}");
                 }
             }
-            
+
             // Execute request
+            _reporter.OnRequestSent(spec);
+            var sw = new Stopwatch();
+            sw.Start();
             var response = _restClient.Execute(request);
-            
-            return new RestSharpApiResultContext(response, this);
+            sw.Stop();
+
+            var result = new RestSharpApiResultContext(response, sw.ElapsedMilliseconds, this);
+
+            _reporter.OnResponseReceived(result);
+
+            return result;
+        
+        
         }
         catch (Exception ex)
         {

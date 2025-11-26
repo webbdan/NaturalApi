@@ -50,7 +50,7 @@ public static class ServiceConfiguration
             {
                 var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
                 var httpClient = httpClientFactory.CreateClient("ApiClient");
-                var executor = new HttpClientExecutor(httpClient);
+                var executor = new HttpClientExecutor(httpClient, null);
                 var defaults = provider.GetRequiredService<IApiDefaultsProvider>();
                 return new CustomApi(executor, defaults, httpClient);
             });

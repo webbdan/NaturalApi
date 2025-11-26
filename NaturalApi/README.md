@@ -79,6 +79,7 @@ var newUser = await Api.For("/users")
 - [**Error Handling**](documentation/error-handling.md) - Exception types, debugging, troubleshooting
 - [**Testing Guide**](documentation/testing-guide.md) - Unit testing with mocks, integration testing
 - [**Extensibility**](documentation/extensibility.md) - Custom executors, validators, auth providers
+- [**Reporting**](documentation/reporting.md) - Configurable reporters, DI factory and examples
 
 ### Reference
 - [**API Reference**](documentation/api-reference.md) - Complete interface and class documentation

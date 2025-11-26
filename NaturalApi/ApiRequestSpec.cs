@@ -15,6 +15,7 @@ namespace NaturalApi;
 /// <param name="Username">Username context for per-user authentication</param>
 /// <param name="Password">Password context for authentication</param>
 /// <param name="Cookies">Request cookies to be sent with the request</param>
+/// <param name="Reporter">Optional per-request reporter override</param>
 public record ApiRequestSpec(
     string Endpoint,
     HttpMethod Method,
@@ -26,7 +27,8 @@ public record ApiRequestSpec(
     bool SuppressAuth = false,
     string? Username = null,
     string? Password = null,
-    IDictionary<string, string> Cookies = null)
+    IDictionary<string, string> Cookies = null,
+    NaturalApi.Reporter.INaturalReporter? Reporter = null)
 {
     /// <summary>
     /// Creates a new specification with an additional header.
@@ -75,7 +77,7 @@ public record ApiRequestSpec(
     public ApiRequestSpec WithQueryParams(object parameters)
     {
         var newQueryParams = new Dictionary<string, object>(QueryParams);
-        
+
         if (parameters is IDictionary<string, object> dict)
         {
             foreach (var param in dict)
@@ -92,7 +94,7 @@ public record ApiRequestSpec(
                 newQueryParams[prop.Name] = prop.GetValue(parameters) ?? string.Empty;
             }
         }
-        
+
         return this with { QueryParams = newQueryParams };
     }
 
@@ -116,7 +118,7 @@ public record ApiRequestSpec(
     public ApiRequestSpec WithPathParams(object parameters)
     {
         var newPathParams = new Dictionary<string, object>(PathParams);
-        
+
         if (parameters is IDictionary<string, object> dict)
         {
             foreach (var param in dict)
@@ -133,7 +135,7 @@ public record ApiRequestSpec(
                 newPathParams[prop.Name] = prop.GetValue(parameters) ?? string.Empty;
             }
         }
-        
+
         return this with { PathParams = newPathParams };
     }
 
@@ -231,5 +233,13 @@ public record ApiRequestSpec(
     public ApiRequestSpec ClearCookies()
     {
         return this with { Cookies = new Dictionary<string, string>() };
+    }
+
+    /// <summary>
+    /// Create a new specification with a per-request reporter.
+    /// </summary>
+    public ApiRequestSpec WithReporter(NaturalApi.Reporter.INaturalReporter reporter)
+    {
+        return this with { Reporter = reporter };
     }
 }

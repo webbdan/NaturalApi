@@ -1,4 +1,3 @@
-# AIModified:2025-10-10T18:34:01Z
 # Authentication Guide
 
 > NaturalApi provides flexible authentication options from simple inline tokens to sophisticated auth providers with caching and per-user token resolution.

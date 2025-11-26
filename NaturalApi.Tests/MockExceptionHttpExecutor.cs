@@ -1,3 +1,4 @@
+using NaturalApi.Reporter;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
@@ -12,6 +13,7 @@ public class MockExceptionHttpExecutor : IHttpExecutor
 {
     private readonly ExceptionType _exceptionType;
     private readonly string? _customMessage;
+    private INaturalReporter _reporter = new NullReporter();
 
     public enum ExceptionType
     {
@@ -28,6 +30,8 @@ public class MockExceptionHttpExecutor : IHttpExecutor
         _exceptionType = exceptionType;
         _customMessage = customMessage;
     }
+
+    public INaturalReporter Reporter { get => _reporter; set => _reporter = value ?? new NullReporter(); }
 
     public IApiResultContext Execute(ApiRequestSpec spec)
     {

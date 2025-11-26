@@ -1,4 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
+using NaturalApi.Reporter;
+using System;
+using System.Linq;
+using System.Net.Http;
+using System.Collections.Generic;
 
 namespace NaturalApi;
 
@@ -21,7 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IApi>(provider =>
         {
             var httpClient = provider.GetRequiredService<HttpClient>();
-            var executor = new HttpClientExecutor(httpClient);
+            var executor = new HttpClientExecutor(httpClient, null);
             var defaults = provider.GetService<IApiDefaultsProvider>();
             
             if (defaults != null)
@@ -39,6 +44,59 @@ public static class ServiceCollectionExtensions
         {
             services.AddSingleton<IApiDefaultsProvider, DefaultApiDefaults>();
         }
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers reporter factory and common reporters using the default internal mapping.
+    /// </summary>
+    public static IServiceCollection AddNaturalApiReporting(this IServiceCollection services)
+    {
+        // Default map - keep in sync with ReporterFactory defaults
+        var defaultMap = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["default"] = typeof(DefaultReporter),
+            ["null"] = typeof(NullReporter),
+            ["compact"] = typeof(CompactReporter)
+        };
+
+        return services.AddNaturalApiReporting(defaultMap);
+    }
+
+    /// <summary>
+    /// Registers reporter factory and reporters using the provided mapping.
+    /// The mapping keys are reporter names and values are concrete reporter types.
+    /// </summary>
+    public static IServiceCollection AddNaturalApiReporting(this IServiceCollection services, IDictionary<string, Type> reporterMap)
+    {
+        if (services == null) throw new ArgumentNullException(nameof(services));
+        if (reporterMap == null) throw new ArgumentNullException(nameof(reporterMap));
+
+        // Ensure the reporter types are registered with DI (singleton by default)
+        foreach (var kv in reporterMap)
+        {
+            var t = kv.Value;
+            if (!services.Any(s => s.ServiceType == t))
+            {
+                services.AddSingleton(t);
+            }
+        }
+
+        // Ensure at least DefaultReporter is registered for INaturalReporter resolution
+        if (!services.Any(s => s.ServiceType == typeof(DefaultReporter)))
+        {
+            services.AddSingleton<DefaultReporter>();
+        }
+
+        // Register INaturalReporter default (so code that asks directly gets DefaultReporter)
+        if (!services.Any(s => s.ServiceType == typeof(INaturalReporter)))
+        {
+            services.AddSingleton<INaturalReporter>(provider => provider.GetRequiredService<DefaultReporter>());
+        }
+
+        // Register factory using provided map
+        services.AddSingleton<IReporterFactory>(provider => new ReporterFactory(provider, reporterMap));
 
         return services;
     }
@@ -83,7 +141,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<IApi>(provider =>
         {
-            var executor = new HttpClientExecutor(httpClient);
+            var executor = new HttpClientExecutor(httpClient, null);
             var defaults = provider.GetService<IApiDefaultsProvider>();
             return defaults != null ? new Api(executor, defaults) : new Api(executor);
         });
@@ -121,7 +179,7 @@ public static class ServiceCollectionExtensions
         {
             var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
             var httpClient = httpClientFactory.CreateClient(httpClientName);
-            var executor = new HttpClientExecutor(httpClient);
+            var executor = new HttpClientExecutor(httpClient, null);
             var defaults = provider.GetService<IApiDefaultsProvider>();
             return defaults != null ? new Api(executor, defaults) : new Api(executor);
         });
@@ -136,6 +194,12 @@ public static class ServiceCollectionExtensions
     /// <returns>The service collection for chaining</returns>
     public static IServiceCollection AddNaturalApi(this IServiceCollection services, NaturalApiConfiguration config)
     {
+        // Only register reporting support if an IReporterFactory hasn't been registered already
+        if (!services.Any(s => s.ServiceType == typeof(IReporterFactory)))
+        {
+            services.AddNaturalApiReporting();
+        }
+
         // Register HttpClient if base URL is provided
         if (!string.IsNullOrEmpty(config.BaseUrl))
         {
@@ -159,10 +223,10 @@ public static class ServiceCollectionExtensions
         {
             services.AddSingleton<IApiAuthProvider>(config.AuthProvider);
             services.AddSingleton<IApiDefaultsProvider>(provider => 
-            {
-                var auth = provider.GetRequiredService<IApiAuthProvider>();
-                return new DefaultApiDefaults(authProvider: auth);
-            });
+        {
+            var auth = provider.GetRequiredService<IApiAuthProvider>();
+            return new DefaultApiDefaults(authProvider: auth);
+        });
         }
         else
         {
@@ -174,7 +238,14 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IApi>(provider =>
         {
             HttpClient httpClient;
-            
+            var reporterFactory = provider.GetService<IReporterFactory>();
+            INaturalReporter? reporterFromConfig = null;
+
+            if (!string.IsNullOrEmpty(config.ReporterName) && reporterFactory != null)
+            {
+                reporterFromConfig = reporterFactory.Get(config.ReporterName!);
+            }
+
             if (!string.IsNullOrEmpty(config.BaseUrl))
             {
                 var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
@@ -191,7 +262,34 @@ public static class ServiceCollectionExtensions
             }
 
             var defaults = provider.GetService<IApiDefaultsProvider>();
-            return new Api(defaults, httpClient);
+
+            // If defaults provider exists, create executor using the configured reporter (if any)
+            if (defaults != null)
+            {
+                // Prefer reporter from config, then defaults, then existing executor reporter
+                var reporterToUse = reporterFromConfig ?? (defaults is DefaultApiDefaults dd ? dd.Reporter : null);
+
+                IHttpExecutor executor;
+                if (defaults.AuthProvider != null)
+                {
+                    executor = new AuthenticatedHttpClientExecutor(httpClient, reporterToUse);
+                }
+                else
+                {
+                    executor = new HttpClientExecutor(httpClient, reporterToUse);
+                }
+
+                return new Api(executor, defaults, reporterToUse);
+            }
+
+            // No defaults - create Api with reporter if provided
+            if (reporterFromConfig != null)
+            {
+                var executor = new HttpClientExecutor(httpClient, reporterFromConfig);
+                return new Api(executor);
+            }
+
+            return new Api(new HttpClientExecutor(httpClient, null));
         });
 
         return services;

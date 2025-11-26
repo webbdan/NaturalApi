@@ -1,6 +1,8 @@
 using Microsoft.Playwright;
 using NaturalApi;
 using NaturalApi.Integration.Tests.Playwright.Tests;
+using NaturalApi.Reporter;
+using System.Diagnostics;
 
 namespace NaturalApi.Integration.Tests.Playwright.Executors;
 
@@ -12,6 +14,7 @@ public class PlaywrightHttpExecutor : IAuthenticatedHttpExecutor
 {
     private readonly IAPIRequestContext _apiRequestContext;
     private readonly string _baseUrl;
+    private INaturalReporter _reporter = new DefaultReporter();
 
     /// <summary>
     /// Initializes a new instance of the PlaywrightHttpExecutor class.
@@ -57,6 +60,8 @@ public class PlaywrightHttpExecutor : IAuthenticatedHttpExecutor
         var playwright = Microsoft.Playwright.Playwright.CreateAsync().GetAwaiter().GetResult();
         _apiRequestContext = playwright.APIRequest.NewContextAsync().GetAwaiter().GetResult();
     }
+
+    public INaturalReporter Reporter { get => _reporter; set => _reporter = value ?? new DefaultReporter(); }
 
     /// <summary>
     /// Executes an HTTP request based on the provided specification.
@@ -106,9 +111,20 @@ public class PlaywrightHttpExecutor : IAuthenticatedHttpExecutor
             }
             
             // Execute request based on method
+            var reporterToUse = spec.Reporter ?? _reporter;
+            reporterToUse.OnRequestSent(spec);
+
+            var sw = Stopwatch.StartNew();
             var response = ExecuteRequestByMethod(url, requestOptions, spec.Method);
-            
-            return new PlaywrightApiResultContext(response, this);
+            sw.Stop();
+
+            var result = new PlaywrightApiResultContext(response, this)
+            {
+                Duration = sw.ElapsedMilliseconds
+            };
+
+            reporterToUse.OnResponseReceived(result);
+            return result;
         }
         catch (Exception ex)
         {
@@ -181,9 +197,20 @@ public class PlaywrightHttpExecutor : IAuthenticatedHttpExecutor
             }
             
             // Execute request based on method
+            var reporterToUse = spec.Reporter ?? _reporter;
+            reporterToUse.OnRequestSent(spec);
+
+            var sw = Stopwatch.StartNew();
             var response = ExecuteRequestByMethod(url, requestOptions, spec.Method);
-            
-            return new PlaywrightApiResultContext(response, this);
+            sw.Stop();
+
+            var result = new PlaywrightApiResultContext(response, this)
+            {
+                Duration = sw.ElapsedMilliseconds
+            };
+
+            reporterToUse.OnResponseReceived(result);
+            return result;
         }
         catch (Exception ex)
         {

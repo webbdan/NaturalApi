@@ -23,6 +23,12 @@ public class NaturalApiConfiguration
     public IApiAuthProvider? AuthProvider { get; set; }
 
     /// <summary>
+    /// Optional reporter selection key. If provided, service registrations that support reporters
+    /// will resolve a reporter instance from the registered reporter factory using this key.
+    /// </summary>
+    public string? ReporterName { get; set; }
+
+    /// <summary>
     /// Creates a simple configuration with just a base URL.
     /// </summary>
     /// <param name="baseUrl">The base URL for the API</param>

@@ -1,3 +1,5 @@
+using NaturalApi.Reporter;
+using System.Diagnostics;
 using System.Net.Http.Headers;
 
 namespace NaturalApi;
@@ -9,15 +11,15 @@ namespace NaturalApi;
 public class AuthenticatedHttpClientExecutor : IAuthenticatedHttpExecutor
 {
     private readonly HttpClient _httpClient;
+    private INaturalReporter _reporter;
 
-    /// <summary>
-    /// Initializes a new instance of the AuthenticatedHttpClientExecutor class.
-    /// </summary>
-    /// <param name="httpClient">HttpClient instance for making requests</param>
-    public AuthenticatedHttpClientExecutor(HttpClient httpClient)
+    public AuthenticatedHttpClientExecutor(HttpClient httpClient, INaturalReporter? reporter = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _reporter = reporter ?? new DefaultReporter();
     }
+
+    public INaturalReporter Reporter { get { return _reporter; } set { _reporter = value; } }
 
     /// <summary>
     /// Executes an HTTP request based on the provided specification.
@@ -93,6 +95,13 @@ public class AuthenticatedHttpClientExecutor : IAuthenticatedHttpExecutor
             
             // Execute the request with timeout if specified
             HttpResponseMessage response;
+            var sw = new Stopwatch();
+            sw.Start();
+
+            // prefer per-request reporter if present
+            var reporterToUse = spec.Reporter ?? _reporter;
+            reporterToUse.OnRequestSent(spec);
+
             if (spec.Timeout.HasValue)
             {
                 using var cts = new CancellationTokenSource(spec.Timeout.Value);
@@ -102,8 +111,13 @@ public class AuthenticatedHttpClientExecutor : IAuthenticatedHttpExecutor
             {
                 response = await _httpClient.SendAsync(request);
             }
+            sw.Stop();
             
-            return new ApiResultContext(response, this);
+            var result = new ApiResultContext(response, sw.ElapsedMilliseconds, this);
+
+            reporterToUse.OnResponseReceived(result);
+
+            return result;
         }
         catch (Exception ex)
         {

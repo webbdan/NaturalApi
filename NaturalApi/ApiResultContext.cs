@@ -17,6 +17,11 @@ public class ApiResultContext : IApiResultContext
     public int StatusCode { get; }
 
     /// <summary>
+    /// Duration of the request in ms
+    /// </summary>
+    public long Duration { get; set; }
+
+    /// <summary>
     /// Gets the response headers as a dictionary.
     /// </summary>
     public IDictionary<string, string> Headers { get; }
@@ -33,11 +38,12 @@ public class ApiResultContext : IApiResultContext
     /// </summary>
     /// <param name="response">HTTP response message</param>
     /// <param name="httpExecutor">HTTP executor for chaining</param>
-    public ApiResultContext(HttpResponseMessage response, IHttpExecutor httpExecutor)
+    public ApiResultContext(HttpResponseMessage response, long duration, IHttpExecutor httpExecutor)
     {
         Response = response ?? throw new ArgumentNullException(nameof(response));
         _httpExecutor = httpExecutor ?? throw new ArgumentNullException(nameof(httpExecutor));
         StatusCode = (int)response.StatusCode;
+        Duration = duration;
         // Combine response headers and content headers
         var allHeaders = new Dictionary<string, string>();
         

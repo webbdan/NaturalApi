@@ -118,6 +118,11 @@ public interface IApiContext
     IApiContext ClearCookies();
 
     /// <summary>
+    /// Set a reporter for this request (per-call override).
+    /// </summary>
+    IApiContext WithReporter(NaturalApi.Reporter.INaturalReporter reporter);
+
+    /// <summary>
     /// Executes a GET request.
     /// </summary>
     /// <returns>Result context for validation</returns>
