@@ -8,12 +8,12 @@ namespace NaturalApi.Reporter
 {
     public sealed class NullReporter : INaturalReporter
     {
-        public void OnAssertionFailed(string message, ApiResultContext response)
+        public void OnAssertionFailed(string message, IApiResultContext response)
         {
 
         }
 
-        public void OnAssertionPassed(string message, ApiResultContext response)
+        public void OnAssertionPassed(string message, IApiResultContext response)
         {
 
         }

@@ -33,14 +33,12 @@ public class TimeoutHandlingTests
         var shortTimeout = TimeSpan.FromMilliseconds(100); // Very short timeout
 
         // Act & Assert
-        // This should timeout because delay/2 takes 2 seconds but timeout is 100ms
-        var exception = Assert.ThrowsException<AggregateException>(() => 
+        // The async execution path unwraps AggregateException, so TaskCanceledException
+        // is thrown directly (not wrapped). This is the correct .NET async behavior.
+        Assert.ThrowsException<TaskCanceledException>(() => 
             api.For("https://test.local/delay/2")
                 .WithTimeout(shortTimeout)
                 .Get());
-        
-        // Verify the inner exception is TaskCanceledException
-        Assert.IsInstanceOfType(exception.InnerException, typeof(TaskCanceledException));
     }
 
     [TestMethod]

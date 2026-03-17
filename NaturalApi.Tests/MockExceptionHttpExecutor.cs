@@ -39,6 +39,11 @@ public class MockExceptionHttpExecutor : IHttpExecutor
         throw new ApiExecutionException("Error during HTTP request execution", exception, spec);
     }
 
+    public Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Execute(spec));
+    }
+
     private Exception CreateException()
     {
         return _exceptionType switch

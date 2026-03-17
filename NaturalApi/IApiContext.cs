@@ -154,4 +154,42 @@ public interface IApiContext
     /// <param name="body">Request body (optional)</param>
     /// <returns>Result context for validation</returns>
     IApiResultContext Patch(object? body = null);
+
+    /// <summary>
+    /// Executes a GET request asynchronously.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result context for validation</returns>
+    Task<IApiResultContext> GetAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes a DELETE request asynchronously.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result context for validation</returns>
+    Task<IApiResultContext> DeleteAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes a POST request asynchronously with optional body.
+    /// </summary>
+    /// <param name="body">Request body (optional)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result context for validation</returns>
+    Task<IApiResultContext> PostAsync(object? body = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes a PUT request asynchronously with optional body.
+    /// </summary>
+    /// <param name="body">Request body (optional)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result context for validation</returns>
+    Task<IApiResultContext> PutAsync(object? body = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes a PATCH request asynchronously with optional body.
+    /// </summary>
+    /// <param name="body">Request body (optional)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result context for validation</returns>
+    Task<IApiResultContext> PatchAsync(object? body = null, CancellationToken cancellationToken = default);
 }

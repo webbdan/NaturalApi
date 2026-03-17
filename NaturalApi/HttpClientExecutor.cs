@@ -1,7 +1,4 @@
 using NaturalApi.Reporter;
-using Spectre.Console;
-using System.Diagnostics;
-using System.Reflection.Metadata.Ecma335;
 
 namespace NaturalApi;
 
@@ -18,114 +15,51 @@ public class HttpClientExecutor : IHttpExecutor
     /// Initializes a new instance of the HttpClientExecutor class.
     /// </summary>
     /// <param name="httpClient">HttpClient instance for making requests</param>
+    /// <param name="reporter">Optional reporter for request/response logging</param>
     public HttpClientExecutor(HttpClient httpClient, INaturalReporter? reporter = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _reporter = reporter ?? new DefaultReporter();
     }
 
-    public INaturalReporter Reporter { get { return _reporter; } set { _reporter = value; } }
+    public INaturalReporter Reporter { get => _reporter; set => _reporter = value; }
 
     /// <summary>
-    /// Executes an HTTP request based on the provided specification.
+    /// Executes an HTTP request synchronously based on the provided specification.
     /// </summary>
-    /// <param name="spec">Request specification containing all request details</param>
-    /// <returns>Result context with response data and validation methods</returns>
     public IApiResultContext Execute(ApiRequestSpec spec)
     {
-        if (spec == null)
-            throw new ArgumentNullException(nameof(spec));
+        if (spec == null) throw new ArgumentNullException(nameof(spec));
 
         try
         {
-            // Build the URL with path and query parameters
-            var url = BuildUrl(spec);
-            
-            // Create the HTTP request message
-            var request = new HttpRequestMessage(spec.Method, url);
-            
-            // Add headers (excluding Content-Type which goes on content)
-            foreach (var header in spec.Headers)
-            {
-                if (header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
-                {
-                    // Skip Content-Type here, it will be set on content
-                    continue;
-                }
-                request.Headers.Add(header.Key, header.Value);
-            }
-            
-            // Add cookies from request specification
-            if (spec.Cookies != null && spec.Cookies.Count > 0)
-            {
-                var cookieValues = spec.Cookies.Select(c => $"{c.Key}={c.Value}");
-                request.Headers.Add("Cookie", string.Join("; ", cookieValues));
-            }
-            
-            // Add body for POST, PUT, PATCH requests
-            if (spec.Body != null && (spec.Method == HttpMethod.Post || spec.Method == HttpMethod.Put || spec.Method == HttpMethod.Patch))
-            {
-                var json = System.Text.Json.JsonSerializer.Serialize(spec.Body);
-                // Extract just the media type from Content-Type header (remove charset if present)
-                var contentType = spec.Headers.ContainsKey("Content-Type") 
-                    ? spec.Headers["Content-Type"].Split(';')[0].Trim() 
-                    : "application/json";
-                request.Content = new StringContent(json, System.Text.Encoding.UTF8, contentType);
-            }
-            
-            // Execute the request with timeout if specified
-            HttpResponseMessage response;
-            var sw = new Stopwatch();
-            sw.Start();
-
-            // Use per-request reporter if set, otherwise executor reporter
-            var reporterToUse = spec.Reporter ?? _reporter;
-            reporterToUse.OnRequestSent(spec);
-
-            if (spec.Timeout.HasValue)
-            {
-                using var cts = new CancellationTokenSource(spec.Timeout.Value);
-                response = _httpClient.Send(request, cts.Token);
-            }
-            else
-            {
-                response = _httpClient.Send(request);
-            }
-            sw.Stop();
-
-            var result = new ApiResultContext(response, sw.ElapsedMilliseconds, this);
-            reporterToUse.OnResponseReceived(result);
-            return result;
+            var url = HttpRequestHelper.BuildUrl(spec);
+            var request = HttpRequestHelper.BuildRequest(spec, url);
+            return HttpRequestHelper.SendSync(_httpClient, request, spec, _reporter, this);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not ApiExecutionException)
         {
-            // Wrap any exception with full request context
             throw new ApiExecutionException("Error during HTTP request execution", ex, spec);
         }
     }
 
     /// <summary>
-    /// Builds the full URL with path and query parameters.
+    /// Executes an HTTP request asynchronously based on the provided specification.
+    /// This is the preferred method — avoids deadlocks in UI and ASP.NET contexts.
     /// </summary>
-    /// <param name="spec">Request specification</param>
-    /// <returns>Complete URL</returns>
-    private string BuildUrl(ApiRequestSpec spec)
+    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, CancellationToken cancellationToken = default)
     {
-        var url = spec.Endpoint;
-        
-        // Replace path parameters
-        foreach (var param in spec.PathParams)
+        if (spec == null) throw new ArgumentNullException(nameof(spec));
+
+        try
         {
-            url = url.Replace($"{{{param.Key}}}", param.Value.ToString());
+            var url = HttpRequestHelper.BuildUrl(spec);
+            var request = HttpRequestHelper.BuildRequest(spec, url);
+            return await HttpRequestHelper.SendAsync(_httpClient, request, spec, _reporter, this, cancellationToken).ConfigureAwait(false);
         }
-        
-        // Add query parameters
-        if (spec.QueryParams.Count > 0)
+        catch (Exception ex) when (ex is not ApiExecutionException)
         {
-            var queryString = string.Join("&", spec.QueryParams.Select(kvp => $"{kvp.Key}={Uri.EscapeDataString(kvp.Value.ToString() ?? "")}"));
-            url += (url.Contains("?") ? "&" : "?") + queryString;
+            throw new ApiExecutionException("Error during HTTP request execution", ex, spec);
         }
-        
-        return url;
     }
 }

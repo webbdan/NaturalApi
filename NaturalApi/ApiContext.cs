@@ -274,23 +274,81 @@ public sealed class ApiContext : IApiContext
     }
 
     /// <summary>
-    /// Executes the request with authentication support if available.
+    /// Executes a GET request asynchronously.
+    /// </summary>
+    public Task<IApiResultContext> GetAsync(CancellationToken cancellationToken = default)
+    {
+        var spec = _spec.WithMethod(HttpMethod.Get);
+        return ExecuteWithAuthAsync(spec, cancellationToken);
+    }
+
+    /// <summary>
+    /// Executes a DELETE request asynchronously.
+    /// </summary>
+    public Task<IApiResultContext> DeleteAsync(CancellationToken cancellationToken = default)
+    {
+        var spec = _spec.WithMethod(HttpMethod.Delete);
+        return ExecuteWithAuthAsync(spec, cancellationToken);
+    }
+
+    /// <summary>
+    /// Executes a POST request asynchronously with optional body.
+    /// </summary>
+    public Task<IApiResultContext> PostAsync(object? body = null, CancellationToken cancellationToken = default)
+    {
+        var spec = _spec.WithMethod(HttpMethod.Post).WithBody(body);
+        return ExecuteWithAuthAsync(spec, cancellationToken);
+    }
+
+    /// <summary>
+    /// Executes a PUT request asynchronously with optional body.
+    /// </summary>
+    public Task<IApiResultContext> PutAsync(object? body = null, CancellationToken cancellationToken = default)
+    {
+        var spec = _spec.WithMethod(HttpMethod.Put).WithBody(body);
+        return ExecuteWithAuthAsync(spec, cancellationToken);
+    }
+
+    /// <summary>
+    /// Executes a PATCH request asynchronously with optional body.
+    /// </summary>
+    public Task<IApiResultContext> PatchAsync(object? body = null, CancellationToken cancellationToken = default)
+    {
+        var spec = _spec.WithMethod(HttpMethod.Patch).WithBody(body);
+        return ExecuteWithAuthAsync(spec, cancellationToken);
+    }
+
+    /// <summary>
+    /// Executes the request synchronously with authentication support if available.
+    /// Kept for backward compatibility — prefer the async verb methods.
     /// </summary>
     /// <param name="spec">Request specification</param>
     /// <returns>Result context</returns>
     private IApiResultContext ExecuteWithAuth(ApiRequestSpec spec)
     {
-        
+        // Delegate to the async path — this still blocks, but existing sync callers
+        // keep working. New callers should use GetAsync/PostAsync/etc.
+        return ExecuteWithAuthAsync(spec, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Executes the request asynchronously with authentication support if available.
+    /// This is the primary execution path — no sync-over-async blocking.
+    /// </summary>
+    /// <param name="spec">Request specification</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result context</returns>
+    private async Task<IApiResultContext> ExecuteWithAuthAsync(ApiRequestSpec spec, CancellationToken cancellationToken)
+    {
         if (_executor is IAuthenticatedHttpExecutor authExecutor && _authProvider != null)
         {
-            // Use authenticated executor
-            return authExecutor.ExecuteAsync(spec, _authProvider, _spec.Username, _spec.Password, _spec.SuppressAuth).GetAwaiter().GetResult();
+            // Use authenticated executor — fully async, no blocking
+            return await authExecutor.ExecuteAsync(spec, _authProvider, _spec.Username, _spec.Password, _spec.SuppressAuth, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            // Use regular executor
-            return _executor.Execute(spec);
+            // Use regular executor — async path
+            return await _executor.ExecuteAsync(spec, cancellationToken).ConfigureAwait(false);
         }
-
     }
 }

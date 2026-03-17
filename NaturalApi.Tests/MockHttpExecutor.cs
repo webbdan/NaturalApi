@@ -44,6 +44,11 @@ internal class MockHttpExecutor : IHttpExecutor
         // Create a mock result context
         return new MockApiResultContext(response, _responseBody, _headers, this);
     }
+
+    public Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Execute(spec));
+    }
 }
 
 /// <summary>

@@ -14,6 +14,7 @@ public interface IAuthenticatedHttpExecutor : IHttpExecutor
     /// <param name="username">Username context for per-user authentication</param>
     /// <param name="password">Password context for authentication</param>
     /// <param name="suppressAuth">Whether to suppress authentication for this request</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result context with response data and validation methods</returns>
-    Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, string? password, bool suppressAuth);
+    Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, string? password, bool suppressAuth, CancellationToken cancellationToken = default);
 }

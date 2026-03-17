@@ -14,5 +14,14 @@ public interface IHttpExecutor
     /// <param name="spec">Request specification containing all request details</param>
     /// <returns>Result context with response data and validation methods</returns>
     IApiResultContext Execute(ApiRequestSpec spec);
+
+    /// <summary>
+    /// Executes an HTTP request asynchronously based on the provided specification.
+    /// </summary>
+    /// <param name="spec">Request specification containing all request details</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result context with response data and validation methods</returns>
+    Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, CancellationToken cancellationToken = default);
+
     INaturalReporter Reporter { get; set; }
 }

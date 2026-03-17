@@ -6,13 +6,24 @@ namespace NaturalApi;
 /// <summary>
 /// Main entry point for the NaturalApi fluent DSL.
 /// Provides the For() method to create API contexts.
+/// When Api creates its own HttpClient internally (parameterless or baseUrl-only constructors),
+/// a shared static instance is used to avoid socket exhaustion.
+/// For production use, prefer constructors that accept HttpClient or IHttpExecutor externally.
 /// </summary>
-public class Api : IApi
+public class Api : IApi, IDisposable
 {
+    /// <summary>
+    /// Shared static HttpClient for constructors that don't receive an external client.
+    /// HttpClient is designed to be long-lived and reused — creating one per Api instance
+    /// causes socket exhaustion under load. This shared instance avoids that problem.
+    /// </summary>
+    private static readonly HttpClient SharedHttpClient = new();
+
     private IHttpExecutor _httpExecutor;
     private readonly IApiDefaultsProvider? _defaults;
     private readonly string? _baseUrl;
     private INaturalReporter _reporter = new DefaultReporter();
+    private bool _disposed;
 
     public INaturalReporter Reporter
     {
@@ -34,15 +45,29 @@ public class Api : IApi
     /// <summary>
     /// Initializes a new instance of the Api class with default HttpClient.
     /// This is the simplest way to use NaturalApi - just use absolute URLs directly.
+    /// Uses a shared static HttpClient to avoid socket exhaustion.
     /// </summary>
     public Api()
     {
         _reporter = new DefaultReporter();
-        _httpExecutor = new HttpClientExecutor(new HttpClient(), _reporter);
+        _httpExecutor = new HttpClientExecutor(SharedHttpClient, _reporter);
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the Api class with an externally managed HttpClient.
+    /// This is the recommended constructor for production use — you control the client lifetime.
+    /// </summary>
+    /// <param name="httpClient">HttpClient instance (caller is responsible for its lifetime)</param>
+    public Api(HttpClient httpClient)
+    {
+        if (httpClient == null) throw new ArgumentNullException(nameof(httpClient));
+        _reporter = new DefaultReporter();
+        _httpExecutor = new HttpClientExecutor(httpClient, _reporter);
     }
 
     /// <summary>
     /// Initializes a new instance of the Api class with a base URL.
+    /// Uses a shared static HttpClient to avoid socket exhaustion.
     /// </summary>
     /// <param name="baseUrl">Base URL for all requests</param>
     public Api(string baseUrl, INaturalReporter? reporter = null)
@@ -52,13 +77,13 @@ public class Api : IApi
         
         _baseUrl = baseUrl;
         _reporter = reporter ?? new DefaultReporter();
-        _httpExecutor = new HttpClientExecutor(new HttpClient(), _reporter);
+        _httpExecutor = new HttpClientExecutor(SharedHttpClient, _reporter);
     }
 
     public Api(INaturalReporter reporter)
     {
         _reporter = reporter ?? new DefaultReporter();
-        _httpExecutor = new HttpClientExecutor(new HttpClient(), _reporter);
+        _httpExecutor = new HttpClientExecutor(SharedHttpClient, _reporter);
     }
 
     /// <summary>
@@ -93,6 +118,25 @@ public class Api : IApi
         _httpExecutor = defaults.AuthProvider != null 
             ? new AuthenticatedHttpClientExecutor(httpClient, _reporter)
             : new HttpClientExecutor(httpClient, _reporter);
+    }
+
+    /// <summary>
+    /// Releases resources used by the Api instance.
+    /// Note: The shared static HttpClient is NOT disposed — it is application-lifetime scoped.
+    /// Only executor-level resources (if any) are cleaned up.
+    /// </summary>
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            _disposed = true;
+            // Do not dispose SharedHttpClient — it is static and shared across all instances.
+            // If the executor implements IDisposable, dispose it (future-proofing).
+            if (_httpExecutor is IDisposable disposableExecutor)
+            {
+                disposableExecutor.Dispose();
+            }
+        }
     }
 
     /// <summary>

@@ -18,7 +18,7 @@ public class MockHttpExecutorForDSL : IHttpExecutor
         return ExecuteAsync(spec).Result;
     }
 
-    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec)
+    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, CancellationToken cancellationToken = default)
     {
         // Create a mock response based on the endpoint
         var response = new HttpResponseMessage();

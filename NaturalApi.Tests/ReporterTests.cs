@@ -25,8 +25,8 @@ public class ReporterTests
         public bool ResponseReceived { get; private set; }
         public void OnRequestSent(ApiRequestSpec request) => RequestSent = true;
         public void OnResponseReceived(IApiResultContext response) => ResponseReceived = true;
-        public void OnAssertionPassed(string message, ApiResultContext response) { }
-        public void OnAssertionFailed(string message, ApiResultContext response) { }
+        public void OnAssertionPassed(string message, IApiResultContext response) { }
+        public void OnAssertionFailed(string message, IApiResultContext response) { }
     }
 
     [TestMethod]
@@ -80,8 +80,8 @@ public class ReporterTests
                 _outer.ReporterUsed = true;
             }
             public void OnResponseReceived(IApiResultContext response) { }
-            public void OnAssertionPassed(string message, ApiResultContext response) { }
-            public void OnAssertionFailed(string message, ApiResultContext response) { }
+            public void OnAssertionPassed(string message, IApiResultContext response) { }
+            public void OnAssertionFailed(string message, IApiResultContext response) { }
         }
     }
 }
