@@ -126,6 +126,14 @@ public class RestSharpHttpExecutor : IAuthenticatedHttpExecutor
     }
 
     /// <summary>
+    /// Executes an HTTP request asynchronously (IHttpExecutor overload, no auth).
+    /// </summary>
+    public Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, CancellationToken cancellationToken = default)
+    {
+        return ExecuteAsync(spec, null, null, null, true, cancellationToken);
+    }
+
+    /// <summary>
     /// Executes an HTTP request with authentication support.
     /// </summary>
     /// <param name="spec">Request specification containing all request details</param>
@@ -133,8 +141,9 @@ public class RestSharpHttpExecutor : IAuthenticatedHttpExecutor
     /// <param name="username">Username context for per-user authentication</param>
     /// <param name="password">Password context for authentication</param>
     /// <param name="suppressAuth">Whether to suppress authentication for this request</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result context with response data and validation methods</returns>
-    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, string? password, bool suppressAuth)
+    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, IApiAuthProvider? authProvider, string? username, string? password, bool suppressAuth, CancellationToken cancellationToken = default)
     {
         if (spec == null)
             throw new ArgumentNullException(nameof(spec));

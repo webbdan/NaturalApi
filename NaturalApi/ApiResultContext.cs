@@ -68,17 +68,25 @@ public class ApiResultContext : IApiResultContext
 
     /// <summary>
     /// Reads the response body as a string.
+    /// Note: This uses synchronous blocking because it is called from the constructor.
+    /// The async read is wrapped with ConfigureAwait(false) to reduce deadlock risk.
     /// </summary>
     /// <param name="response">HTTP response message</param>
-    /// <returns>Response body as string</returns>
-    private string ReadResponseBody(HttpResponseMessage response)
+    /// <returns>Response body as string, or empty string if content is null</returns>
+    private static string ReadResponseBody(HttpResponseMessage response)
     {
+        if (response.Content == null)
+            return string.Empty;
+
         try
         {
-            return response.Content.ReadAsStringAsync().Result;
+            return response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         }
-        catch
+        catch (Exception ex)
         {
+            // Log to debug output so the failure is observable, but don't crash —
+            // callers rely on RawBody being available even if reading partially failed.
+            System.Diagnostics.Debug.WriteLine($"[NaturalApi] Failed to read response body: {ex.Message}");
             return string.Empty;
         }
     }

@@ -19,12 +19,12 @@ namespace NaturalApi.Reporter
             Console.WriteLine($"RES {response.StatusCode} ({response.Duration}ms)");
         }
 
-        public void OnAssertionPassed(string message, ApiResultContext response)
+        public void OnAssertionPassed(string message, IApiResultContext response)
         {
             Console.WriteLine($"PASS: {message}");
         }
 
-        public void OnAssertionFailed(string message, ApiResultContext response)
+        public void OnAssertionFailed(string message, IApiResultContext response)
         {
             Console.WriteLine($"FAIL: {message}");
         }

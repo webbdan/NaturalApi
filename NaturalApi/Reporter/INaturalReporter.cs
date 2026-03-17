@@ -10,8 +10,8 @@ namespace NaturalApi.Reporter
     {
         void OnRequestSent(ApiRequestSpec request);
         void OnResponseReceived(IApiResultContext response);
-        void OnAssertionPassed(string message, ApiResultContext response);
-        void OnAssertionFailed(string message, ApiResultContext response);
+        void OnAssertionPassed(string message, IApiResultContext response);
+        void OnAssertionFailed(string message, IApiResultContext response);
     }
 
 

@@ -18,7 +18,7 @@ public class MockTimeoutHttpExecutor : IHttpExecutor
         return ExecuteAsync(spec).Result;
     }
 
-    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec)
+    public async Task<IApiResultContext> ExecuteAsync(ApiRequestSpec spec, CancellationToken cancellationToken = default)
     {
         // Use per-request reporter if provided, otherwise executor reporter
         var reporterToUse = spec.Reporter ?? _reporter;

@@ -102,24 +102,24 @@ namespace NaturalApi.Reporter
             return value;
         }
 
-        public void OnAssertionPassed(string message, ApiResultContext response)
+        public void OnAssertionPassed(string message, IApiResultContext response)
         {
             AnsiConsole.MarkupLine(
                 $"[bold green]✔ Assertion passed[/]: {Escape(message)}"
             );
         }
 
-        public void OnAssertionFailed(string message, ApiResultContext response)
+        public void OnAssertionFailed(string message, IApiResultContext response)
         {
             AnsiConsole.MarkupLine(
                 $"[bold red]✘ Assertion failed[/]: {Escape(message)}"
             );
 
             // Optional: print full response body for debugging
-            if (!string.IsNullOrWhiteSpace(response.BodyAs<string>()))
+            if (!string.IsNullOrWhiteSpace(response.RawBody))
             {
                 AnsiConsole.Write(
-                    new Panel(FormatJson(response.BodyAs<string>()))
+                    new Panel(FormatJson(response.RawBody))
                         .Header("Response Body")
                         .BorderColor(Spectre.Console.Color.Red)
                 );

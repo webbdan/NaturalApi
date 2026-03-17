@@ -70,20 +70,5 @@ public class ApiResponse<T> : IApiResponse<T>
     /// </summary>
     /// <param name="endpoint">The target endpoint (absolute or relative URL)</param>
     /// <returns>An API context for building and executing requests</returns>
-    public IApiContext For(string endpoint)
-    {
-        if (string.IsNullOrWhiteSpace(endpoint))
-            throw new ArgumentException("Endpoint cannot be null or empty", nameof(endpoint));
-
-        var spec = new ApiRequestSpec(
-            endpoint,
-            HttpMethod.Get, // Default method, will be overridden by verb methods
-            new Dictionary<string, string>(),
-            new Dictionary<string, object>(),
-            new Dictionary<string, object>(),
-            null,
-            null);
-
-        return new ApiContext(spec, _httpExecutor);
-    }
+    public IApiContext For(string endpoint) => ApiContextFactory.CreateContext(endpoint, _httpExecutor);
 }

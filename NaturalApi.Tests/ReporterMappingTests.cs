@@ -34,8 +34,8 @@ namespace NaturalApi.Tests
 
         private class CustomTestReporter : INaturalReporter
         {
-            public void OnAssertionFailed(string message, ApiResultContext response) { }
-            public void OnAssertionPassed(string message, ApiResultContext response) { }
+            public void OnAssertionFailed(string message, IApiResultContext response) { }
+            public void OnAssertionPassed(string message, IApiResultContext response) { }
             public void OnRequestSent(ApiRequestSpec request) { }
             public void OnResponseReceived(IApiResultContext response) { }
         }

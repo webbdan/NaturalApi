@@ -27,9 +27,13 @@ public record ApiRequestSpec(
     bool SuppressAuth = false,
     string? Username = null,
     string? Password = null,
-    IDictionary<string, string> Cookies = null,
+    IDictionary<string, string>? Cookies = null,
     NaturalApi.Reporter.INaturalReporter? Reporter = null)
 {
+    /// <summary>
+    /// Cookies to send with the request. Never null — defaults to empty.
+    /// </summary>
+    public IDictionary<string, string> Cookies { get; init; } = Cookies ?? new Dictionary<string, string>();
     /// <summary>
     /// Creates a new specification with an additional header.
     /// </summary>
@@ -207,7 +211,7 @@ public record ApiRequestSpec(
     /// <returns>New specification with the cookie added</returns>
     public ApiRequestSpec WithCookie(string name, string value)
     {
-        var newCookies = new Dictionary<string, string>(Cookies ?? new Dictionary<string, string>()) { [name] = value };
+        var newCookies = new Dictionary<string, string>(Cookies) { [name] = value };
         return this with { Cookies = newCookies };
     }
 
@@ -218,7 +222,7 @@ public record ApiRequestSpec(
     /// <returns>New specification with cookies added</returns>
     public ApiRequestSpec WithCookies(IDictionary<string, string> cookies)
     {
-        var newCookies = new Dictionary<string, string>(Cookies ?? new Dictionary<string, string>());
+        var newCookies = new Dictionary<string, string>(Cookies);
         foreach (var cookie in cookies)
         {
             newCookies[cookie.Key] = cookie.Value;
