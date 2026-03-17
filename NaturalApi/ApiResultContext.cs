@@ -91,20 +91,24 @@ public class ApiResultContext : IApiResultContext
     public T BodyAs<T>()
     {
         if (string.IsNullOrEmpty(RawBody))
-        {
             throw new InvalidOperationException("Response body is empty or null");
-        }
-
+    
         try
         {
-            return System.Text.Json.JsonSerializer.Deserialize<T>(RawBody) 
-                ?? throw new InvalidOperationException("Deserialization returned null");
+            return System.Text.Json.JsonSerializer.Deserialize<T>(
+                RawBody,
+                new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                }
+            ) ?? throw new InvalidOperationException("Deserialization returned null");
         }
         catch (System.Text.Json.JsonException ex)
         {
             throw new InvalidOperationException($"Failed to deserialize JSON: {ex.Message}", ex);
         }
     }
+
 
     /// <summary>
     /// Validates the response using fluent assertions.
