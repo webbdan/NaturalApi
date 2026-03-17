@@ -122,6 +122,12 @@ You can actually read that aloud. And it still compiles.
 
 ---
 
+## Default reporter
+
+NaturalApi now includes a built-in `DefaultReporter` that prints a compact request/response summary to the console. It is used when no other reporter is provided. You can override the reporter per-call using `WithReporter(...)`, provide a reporter via your `IApiDefaultsProvider`, or configure one via DI using `AddNaturalApiReporting()` and `NaturalApiConfiguration.ReporterName` (see the [Reporting guide](documentation/reporting.md)).
+
+---
+
 ## Five things you can express in one line
 
 ```csharp

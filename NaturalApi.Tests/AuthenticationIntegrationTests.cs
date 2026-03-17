@@ -1,30 +1,21 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NaturalApi;
-using System.Net.Http;
 
 namespace NaturalApi.Tests;
 
 [TestClass]
 public class AuthenticationIntegrationTests
 {
-    private AuthenticatedHttpClientExecutor _authenticatedExecutor = null!;
+    private MockAuthenticatedHttpExecutor _authenticatedExecutor = null!;
     private TestApiDefaultsProvider _defaults = null!;
     private TestAuthProvider _authProvider = null!;
-    private HttpClient _httpClient = null!;
 
     [TestInitialize]
     public void Setup()
     {
-        _httpClient = new HttpClient();
-        _authenticatedExecutor = new AuthenticatedHttpClientExecutor(_httpClient);
+        _authenticatedExecutor = new MockAuthenticatedHttpExecutor();
         _authProvider = new TestAuthProvider("test-token");
         _defaults = new TestApiDefaultsProvider(authProvider: _authProvider);
-    }
-
-    [TestCleanup]
-    public void Cleanup()
-    {
-        _httpClient?.Dispose();
     }
 
     [TestMethod]
